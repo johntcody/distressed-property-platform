@@ -1,0 +1,10 @@
+openapi: 3.0.3
+info:
+  title: Texas Distressed Property Intelligence Platform API
+  version: 0.1.0
+  description: Full API specification — see api/gateway for implementation
+
+# This file mirrors distressed-property-platform/api-spec.yaml at the root.
+# Kept here for docs discoverability.
+
+$ref: "../api-spec.yaml"

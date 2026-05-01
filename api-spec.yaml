@@ -1,0 +1,96 @@
+openapi: 3.0.3
+info:
+  title: Texas Distressed Property Intelligence Platform API
+  version: 0.1.0
+  description: BFF API for distressed property intelligence
+
+servers:
+  - url: http://localhost:8000
+    description: Local development
+
+paths:
+  /api/v1/properties:
+    get:
+      summary: List properties
+      tags: [Properties]
+      parameters:
+        - name: county
+          in: query
+          schema:
+            type: string
+        - name: distress_type
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: List of properties
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Property"
+
+  /api/v1/properties/{id}:
+    get:
+      summary: Get property by ID
+      tags: [Properties]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Property detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Property"
+
+  /api/v1/opportunities:
+    get:
+      summary: List scored investment opportunities
+      tags: [Opportunities]
+      responses:
+        "200":
+          description: Scored opportunities
+
+  /api/v1/alerts:
+    get:
+      summary: List alerts
+      tags: [Alerts]
+      responses:
+        "200":
+          description: Alert list
+
+components:
+  schemas:
+    Property:
+      type: object
+      properties:
+        id:
+          type: string
+        address:
+          type: string
+        county:
+          type: string
+        distress_type:
+          type: string
+          enum: [foreclosure, tax_delinquency, probate, preforeclosure]
+        distress_score:
+          type: number
+        arv:
+          type: number
+        mao:
+          type: number
+        created_at:
+          type: string
+          format: date-time
