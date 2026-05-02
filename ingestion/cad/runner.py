@@ -1,11 +1,14 @@
 """
 CAD ingestion runner — entry point for scheduled execution.
 
+Supports local filesystem paths only. If running in Lambda, download the
+CAD export to /tmp first and pass the local path as the file argument.
+
 Usage (manual):
     python -m ingestion.cad.runner --county travis --file /data/travis_cad_2024.csv
 
 Usage (Lambda / cron pattern):
-    handler(event={"county": "travis", "file": "s3://bucket/travis_cad_2024.csv"}, context=None)
+    handler(event={"county": "travis", "file": "/tmp/travis_cad_2024.csv"}, context=None)
 
 Environment variables:
     DATABASE_URL   — psycopg2 DSN, e.g. postgresql://user:pass@host:5433/dbname

@@ -51,10 +51,13 @@ pytest tests/ingestion/cad/
 
 ## Scheduling
 
-The runner exposes a Lambda-compatible `handler(event, context)` function:
+The runner exposes a Lambda-compatible `handler(event, context)` function.
+Only local filesystem paths are supported — download the file to `/tmp` before invoking:
 
 ```python
-handler({"county": "travis", "file": "s3://bucket/travis_2024.csv"}, None)
+# In your Lambda function:
+s3.download_file("my-bucket", "travis_2024.csv", "/tmp/travis_2024.csv")
+handler({"county": "travis", "file": "/tmp/travis_2024.csv"}, None)
 ```
 
 Recommended cadence: **weekly** (CAD values change at annual re-appraisal; weekly catches
