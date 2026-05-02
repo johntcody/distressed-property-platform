@@ -65,28 +65,29 @@ def upsert_parcels(conn: "psycopg2.connection", parcels: list[dict]) -> dict:
     Bulk-upsert a list of normalized parcel dicts.
 
     Returns a summary dict: {inserted, updated, errors}.
-    Uses executemany with a single transaction per batch for performance.
+    Uses a SAVEPOINT per row so a single bad row does not roll back
+    successful upserts earlier in the same batch.
     """
-    rows = []
     for p in parcels:
         p["address_norm"] = _normalize_address_stub(p.get("address_raw"))
-        rows.append(p)
 
     inserted = updated = errors = 0
 
     with conn.cursor() as cur:
-        for row in rows:
+        for row in parcels:
             try:
+                cur.execute("SAVEPOINT upsert_row")
                 cur.execute(_UPSERT_SQL, row)
+                cur.execute("RELEASE SAVEPOINT upsert_row")
                 if cur.rowcount == 1:
                     inserted += 1
                 else:
                     updated += 1
             except Exception as exc:
                 logger.error("Upsert failed for APN %s — %s", row.get("apn"), exc)
-                conn.rollback()
+                cur.execute("ROLLBACK TO SAVEPOINT upsert_row")
+                cur.execute("RELEASE SAVEPOINT upsert_row")
                 errors += 1
-                continue
 
         conn.commit()
 
