@@ -1,34 +1,34 @@
--- Migration 004: Deal analysis — rehab estimates, ARV inputs, MAO
+-- Migration 004: Valuations and deal analysis
 
--- ============================================================
--- DEAL_ANALYSIS
--- Stores the full deal analysis snapshot: ARV, rehab, MAO.
--- Append-only so users can compare analyses over time.
--- ============================================================
-CREATE TABLE deal_analysis (
-    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    property_id         UUID NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
+CREATE TYPE rehab_level AS ENUM ('light', 'medium', 'heavy');
 
-    -- ARV inputs
-    arv                 NUMERIC(12,2),
-    arv_comp_count      SMALLINT,
-    arv_confidence      NUMERIC(5,2),
-
-    -- Rehab estimate
-    rehab_level         TEXT NOT NULL DEFAULT 'medium', -- light | medium | heavy
-    rehab_cost_per_sqft NUMERIC(7,2),
-    rehab_cost_total    NUMERIC(12,2),
-    rehab_overridden    BOOLEAN NOT NULL DEFAULT FALSE,  -- TRUE when user manually set cost
-
-    -- MAO calculation
-    discount_target     NUMERIC(5,2) NOT NULL DEFAULT 70.00, -- % of ARV
-    holding_costs       NUMERIC(12,2) NOT NULL DEFAULT 0,
-    mao                 NUMERIC(12,2),                       -- ARV * discount - rehab - holding
-
-    -- Attribution
-    computed_by         TEXT NOT NULL DEFAULT 'system',      -- system | user
-    computed_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+CREATE TABLE IF NOT EXISTS valuations (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    property_id     UUID NOT NULL REFERENCES properties (id) ON DELETE CASCADE,
+    avm             NUMERIC(14, 2),
+    arv             NUMERIC(14, 2),
+    arv_confidence  NUMERIC(5, 2),
+    comp_count      SMALLINT,
+    method          TEXT,
+    provider        TEXT,
+    calculated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_deal_analysis_property_id ON deal_analysis (property_id);
-CREATE INDEX idx_deal_analysis_latest      ON deal_analysis (property_id, computed_at DESC);
+CREATE TABLE IF NOT EXISTS analysis (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    property_id     UUID NOT NULL REFERENCES properties (id) ON DELETE CASCADE,
+    valuation_id    UUID REFERENCES valuations (id) ON DELETE SET NULL,
+    rehab_level     rehab_level NOT NULL DEFAULT 'medium',
+    rehab_cost      NUMERIC(14, 2),
+    rehab_cost_sqft NUMERIC(8, 2),
+    arv_used        NUMERIC(14, 2),
+    discount_pct    NUMERIC(5, 2) NOT NULL DEFAULT 70.0,
+    holding_costs   NUMERIC(14, 2),
+    closing_costs   NUMERIC(14, 2),
+    mao             NUMERIC(14, 2),
+    notes           TEXT,
+    calculated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_valuations_property_id ON valuations (property_id);
+CREATE INDEX idx_analysis_property_id   ON analysis (property_id);

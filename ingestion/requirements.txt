@@ -1,0 +1,23 @@
+# Ingestion pipeline dependencies
+
+# HTTP client
+httpx==0.27.2
+
+# HTML parsing
+beautifulsoup4==4.12.3
+lxml==5.2.2
+
+# PDF extraction
+pdfplumber==0.11.0
+
+# Address parsing
+usaddress==0.5.10
+
+# Postgres async driver
+asyncpg==0.29.0
+
+# Pydantic models (shared with services)
+pydantic==2.7.1
+
+# Optional: browser fallback for JS-heavy portals (probate Odyssey)
+# playwright==1.44.0  # uncomment and run: playwright install chromium
