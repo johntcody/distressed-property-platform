@@ -136,7 +136,7 @@ COUNTY_CONFIGS: dict[str, CadCountyConfig] = {
             "bedrooms": "Beds",
             "bathrooms": "Baths",
         },
-        notes="Request open-records; PTAD annual file available",
+        notes="Portal has bot protection (Cloudflare challenge + app install prompt) — do NOT scrape directly. Use PTAD annual bulk file instead.",
     ),
     "bastrop": CadCountyConfig(
         name="Bastrop",
