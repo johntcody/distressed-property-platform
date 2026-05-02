@@ -65,6 +65,35 @@ def test_load_travis_csv(tmp_path):
     assert p["year_built"] == 1995
 
 
+def test_rows_missing_required_fields_are_skipped(tmp_path):
+    """Rows missing address_raw, city, or zip_code must be skipped, not sent to the DB."""
+    config = COUNTY_CONFIGS["travis"]
+    cm = config.column_map
+
+    def _base_row(**overrides):
+        row = {
+            cm["apn"]: "111",
+            cm["owner_name"]: "TEST",
+            cm["address_raw"]: "1 TEST ST",
+            cm["city"]: "AUSTIN",
+            cm["zip_code"]: "78701",
+            cm["land_value"]: "0",
+            cm["improvement_value"]: "0",
+            cm["total_value"]: "0",
+            cm["sqft"]: "0",
+            cm["year_built"]: "2000",
+            cm["bedrooms"]: "2",
+            cm["bathrooms"]: "1",
+        }
+        row.update(overrides)
+        return row
+
+    for field, col in [("address_raw", cm["address_raw"]), ("city", cm["city"]), ("zip_code", cm["zip_code"])]:
+        file = _write_csv(tmp_path / field, "travis", [_base_row(**{col: ""})])
+        parcels = list(load_cad_file(config, file))
+        assert parcels == [], f"Expected row with blank {field} to be skipped"
+
+
 def test_row_without_apn_is_skipped(tmp_path):
     config = COUNTY_CONFIGS["travis"]
     cm = config.column_map

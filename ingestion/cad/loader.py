@@ -106,18 +106,26 @@ def _normalize_row(row: dict, inv_map: dict, config: CadCountyConfig) -> dict:
         if std_col:
             std[std_col] = value
 
-    apn = _clean(std.get("apn"))
-    if not apn:
-        raise ValueError("Missing APN — row skipped")
+    apn         = _clean(std.get("apn"))
+    address_raw = _clean(std.get("address_raw"))
+    city        = _clean(std.get("city"))
+    zip_code    = _clean(std.get("zip_code"))
+    county      = config.name.lower()
+
+    missing = [name for name, val in [
+        ("apn", apn), ("address_raw", address_raw), ("city", city), ("zip_code", zip_code)
+    ] if not val]
+    if missing:
+        raise ValueError(f"Missing required fields {missing} — row skipped")
 
     return {
         "apn": apn,
-        "county": config.name.lower(),
+        "county": county,
         "state": "TX",
         "owner_name": _clean(std.get("owner_name")),
-        "address_raw": _clean(std.get("address_raw")),
-        "city": _clean(std.get("city")),
-        "zip_code": _clean(std.get("zip_code")),
+        "address_raw": address_raw,
+        "city": city,
+        "zip_code": zip_code,
         "land_value": _to_float(std.get("land_value")),
         "improvement_value": _to_float(std.get("improvement_value")),
         "total_cad_value": _to_float(std.get("total_value")),
