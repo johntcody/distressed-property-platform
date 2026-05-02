@@ -34,7 +34,7 @@ VALUES (
     %(sqft)s, %(year_built)s, %(bedrooms)s, %(bathrooms)s,
     NOW()
 )
-ON CONFLICT (apn) DO UPDATE SET
+ON CONFLICT (apn) WHERE apn IS NOT NULL DO UPDATE SET
     owner_name          = EXCLUDED.owner_name,
     address_raw         = EXCLUDED.address_raw,
     address_norm        = EXCLUDED.address_norm,
@@ -82,8 +82,9 @@ def upsert_parcels(conn: "psycopg2.connection", parcels: list[dict]) -> dict:
             try:
                 cur.execute("SAVEPOINT upsert_row")
                 cur.execute(_UPSERT_SQL, row)
-                cur.execute("RELEASE SAVEPOINT upsert_row")
+                # fetchone() must come before RELEASE — RELEASE replaces the cursor result set.
                 (is_insert,) = cur.fetchone()
+                cur.execute("RELEASE SAVEPOINT upsert_row")
                 if is_insert:
                     inserted += 1
                 else:

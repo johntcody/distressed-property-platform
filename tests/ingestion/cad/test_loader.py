@@ -16,6 +16,7 @@ from ingestion.cad.loader import load_cad_file, _to_int, _to_float
 def _write_csv(tmp_path: Path, county: str, rows: list[dict]) -> Path:
     config = COUNTY_CONFIGS[county]
     headers = list(config.column_map.values())
+    tmp_path.mkdir(parents=True, exist_ok=True)
     file = tmp_path / f"{county}_cad.csv"
     with open(file, "w", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=headers)
