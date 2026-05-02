@@ -48,7 +48,8 @@ ON CONFLICT (apn) DO UPDATE SET
     bedrooms            = EXCLUDED.bedrooms,
     bathrooms           = EXCLUDED.bathrooms,
     cad_refreshed_at    = NOW(),
-    updated_at          = NOW();
+    updated_at          = NOW()
+RETURNING (xmax = 0) AS is_insert;
 """
 
 
@@ -79,7 +80,8 @@ def upsert_parcels(conn: "psycopg2.connection", parcels: list[dict]) -> dict:
                 cur.execute("SAVEPOINT upsert_row")
                 cur.execute(_UPSERT_SQL, row)
                 cur.execute("RELEASE SAVEPOINT upsert_row")
-                if cur.rowcount == 1:
+                (is_insert,) = cur.fetchone()
+                if is_insert:
                     inserted += 1
                 else:
                     updated += 1
