@@ -107,6 +107,9 @@ def test_to_int_handles_bad_value():
     assert _to_int("abc") is None
     assert _to_int("42") == 42
     assert _to_int(None) is None
+    assert _to_int("1,800") == 1800     # comma-separated
+    assert _to_int("1800.0") == 1800    # Excel float representation
+    assert _to_int("") is None
 
 
 def test_bathrooms_parses_as_float(tmp_path):

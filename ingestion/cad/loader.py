@@ -29,8 +29,10 @@ def _clean(value: Optional[str]) -> Optional[str]:
 
 
 def _to_int(value: Optional[str]) -> Optional[int]:
+    # Strip commas ("1,800") and truncate trailing .0 ("1800.0") before parsing.
     try:
-        return int(value) if value and value.strip() else None
+        cleaned = value.replace(",", "").strip() if value else ""
+        return int(float(cleaned)) if cleaned else None
     except ValueError:
         return None
 
