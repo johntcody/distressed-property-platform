@@ -63,11 +63,14 @@ def _normalize_address_stub(address_raw: Optional[str]) -> Optional[str]:
 
 def upsert_parcels(conn: "psycopg2.connection", parcels: list[dict]) -> dict:
     """
-    Bulk-upsert a list of normalized parcel dicts.
+    Upsert a list of normalized parcel dicts, one row at a time.
 
     Returns a summary dict: {inserted, updated, errors}.
-    Uses a SAVEPOINT per row so a single bad row does not roll back
-    successful upserts earlier in the same batch.
+
+    Each row is wrapped in a SAVEPOINT so a constraint violation or bad value
+    on one row rolls back only that row, leaving all prior successes in the
+    transaction intact. This rules out execute_batch/execute_values, which
+    send rows in bulk and cannot wrap individual rows in savepoints.
     """
     for p in parcels:
         p["address_norm"] = _normalize_address_stub(p.get("address_raw"))
