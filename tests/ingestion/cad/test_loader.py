@@ -1,10 +1,7 @@
 """Unit tests for CAD file loader — no database required."""
 
 import csv
-import io
-import textwrap
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
