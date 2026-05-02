@@ -70,7 +70,7 @@ These are not code tasks but must be resolved before the phases that depend on t
 |---|---|
 | 0.1 — Database schema | Complete |
 | 0.2 — Repo scaffolding | Complete |
-| 0.3 — CAD data ingestion | Not started |
+| 0.3 — CAD data ingestion | Complete |
 | 1.1 — Foreclosure scraper | Not started |
 | 1.2 — Property normalization | Not started |
 | 1.3 — Tax delinquency scraper | Not started |
