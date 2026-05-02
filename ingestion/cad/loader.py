@@ -122,5 +122,5 @@ def _normalize_row(row: dict, inv_map: dict, config: CadCountyConfig) -> dict:
         "sqft": _to_int(std.get("sqft")),
         "year_built": _to_int(std.get("year_built")),
         "bedrooms": _to_int(std.get("bedrooms")),
-        "bathrooms": _to_int(std.get("bathrooms")),
+        "bathrooms": _to_float(std.get("bathrooms")),
     }

@@ -107,3 +107,30 @@ def test_to_int_handles_bad_value():
     assert _to_int("abc") is None
     assert _to_int("42") == 42
     assert _to_int(None) is None
+
+
+def test_bathrooms_parses_as_float(tmp_path):
+    """bathrooms is NUMERIC(3,1) — fractional values like 2.5 must not be dropped."""
+    config = COUNTY_CONFIGS["travis"]
+    cm = config.column_map
+
+    def _make_row(baths: str) -> dict:
+        return {
+            cm["apn"]: "999",
+            cm["owner_name"]: "TEST",
+            cm["address_raw"]: "1 TEST ST",
+            cm["city"]: "AUSTIN",
+            cm["zip_code"]: "78701",
+            cm["land_value"]: "0",
+            cm["improvement_value"]: "0",
+            cm["total_value"]: "0",
+            cm["sqft"]: "0",
+            cm["year_built"]: "2000",
+            cm["bedrooms"]: "3",
+            cm["bathrooms"]: baths,
+        }
+
+    for baths_str, expected in [("2.5", 2.5), ("3.0", 3.0), ("2", 2.0)]:
+        file = _write_csv(tmp_path / baths_str, "travis", [_make_row(baths_str)])
+        parcels = list(load_cad_file(config, file))
+        assert parcels[0]["bathrooms"] == expected, f"Failed for bathrooms={baths_str!r}"
