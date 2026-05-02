@@ -68,7 +68,7 @@ async def _process_county(county_name: str) -> Dict[str, Any]:
                     pool, addr.normalized, county_name, prop_data
                 )
 
-            event_data = {**event.dict(), "property_id": property_id, "dedup_key": event.dedup_key}
+            event_data = {**event.model_dump(), "property_id": property_id, "dedup_key": event.dedup_key}
             inserted_id = await insert_event(pool, event_data)
             if inserted_id:
                 inserted += 1

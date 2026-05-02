@@ -95,7 +95,7 @@ async def insert_event(pool: asyncpg.Pool, data: dict) -> Optional[str]:
         ) VALUES (
             $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21
         )
-        ON CONFLICT (dedup_key) DO NOTHING
+        ON CONFLICT (dedup_key) WHERE dedup_key IS NOT NULL DO NOTHING
         RETURNING id
         """,
         data.get("property_id"),

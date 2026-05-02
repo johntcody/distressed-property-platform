@@ -73,7 +73,7 @@ async def _process_county(county_name: str) -> Dict[str, Any]:
 
                 # 3. Insert event (skip on duplicate dedup_key)
                 event_data = {
-                    **event.dict(),
+                    **event.model_dump(),
                     "property_id": property_id,
                     "dedup_key": event.dedup_key,
                 }
