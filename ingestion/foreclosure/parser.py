@@ -1,6 +1,5 @@
 """Foreclosure PDF parser — extracts structured fields from county clerk posting PDFs."""
 
-import io
 import logging
 import re
 from datetime import date, datetime

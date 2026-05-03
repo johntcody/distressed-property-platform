@@ -114,13 +114,9 @@ async def _run(event: Dict[str, Any]) -> Dict[str, Any]:
         [c.name for c in COUNTY_CONFIGS] if county == "all" else [county]
     )
 
-    results = []
-    for name in counties:
-        stats = await _process_county(name)
-        results.append(stats)
-
+    results = await asyncio.gather(*[_process_county(name) for name in counties])
     await close_pool()
-    return {"results": results}
+    return {"results": list(results)}
 
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:

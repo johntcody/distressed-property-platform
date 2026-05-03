@@ -1,13 +1,12 @@
 """Root conftest — sets DATABASE_URL for all async DB tests."""
 
 import os
-import pytest
 
-# Neon test branch (test-distressed-platform) — safe to commit, read-only branch
-_TEST_DSN = (
-    "postgresql://neondb_owner:npg_rCR7EkNgzP4X"
-    "@ep-billowing-wildflower-aeui7pka-pooler.c-2.us-east-2.aws.neon.tech"
-    "/neondb?channel_binding=require&sslmode=require"
+# Resolve test DSN from environment; fall back to a local Postgres instance.
+# For CI/Neon: set TEST_DATABASE_URL in the environment or .env.test (gitignored).
+_TEST_DSN = os.environ.get(
+    "TEST_DATABASE_URL",
+    "postgresql://localhost/distressed_test",
 )
 
 

@@ -1,28 +1,19 @@
 """Property Service routes."""
 
-import os
 from typing import List, Optional
 from uuid import UUID
 
 import asyncpg
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from .models import Property, PropertyCreate
 from .normalizer import PropertyNormalizer
 
 router = APIRouter()
 
-_pool: Optional[asyncpg.Pool] = None
 
-
-async def _get_pool() -> asyncpg.Pool:
-    global _pool
-    if _pool is None:
-        dsn = os.environ.get("DATABASE_URL")
-        if not dsn:
-            raise RuntimeError("DATABASE_URL is not set")
-        _pool = await asyncpg.create_pool(dsn=dsn, min_size=2, max_size=10, command_timeout=30)
-    return _pool
+def _get_pool(request: Request) -> asyncpg.Pool:
+    return request.app.state.pool
 
 
 def _row_to_property(row: asyncpg.Record) -> Property:
@@ -41,6 +32,23 @@ def _row_to_property(row: asyncpg.Record) -> Property:
     )
 
 
+_PROPERTY_SELECT = """
+    SELECT
+        p.id, p.apn, p.address, p.city, p.county, p.state, p.zip_code,
+        p.owner_name, p.created_at, p.updated_at,
+        COALESCE(latest_event.event_type, 'foreclosure') AS distress_type
+    FROM properties p
+    LEFT JOIN LATERAL (
+        SELECT event_type
+        FROM events
+        WHERE property_id = p.id
+        ORDER BY filing_date DESC NULLS LAST
+        LIMIT 1
+    ) latest_event ON true
+    WHERE p.deleted_at IS NULL
+"""
+
+
 @router.get("/properties", response_model=List[Property])
 async def list_properties(
     county: Optional[str] = None,
@@ -49,7 +57,6 @@ async def list_properties(
     offset: int = 0,
     pool: asyncpg.Pool = Depends(_get_pool),
 ):
-    """List properties with optional county/distress_type filters. Joins latest event for distress_type."""
     filters = []
     params: list = []
 
@@ -60,27 +67,11 @@ async def list_properties(
         params.append(distress_type)
         filters.append(f"latest_event.event_type = ${len(params)}")
 
-    where = ("WHERE " + " AND ".join(filters)) if filters else ""
+    extra = (" AND " + " AND ".join(filters)) if filters else ""
     params += [limit, offset]
 
     rows = await pool.fetch(
-        f"""
-        SELECT
-            p.id, p.apn, p.address, p.city, p.county, p.state, p.zip_code,
-            p.owner_name, p.created_at, p.updated_at,
-            COALESCE(latest_event.event_type, 'foreclosure') AS distress_type
-        FROM properties p
-        LEFT JOIN LATERAL (
-            SELECT event_type
-            FROM events
-            WHERE property_id = p.id
-            ORDER BY filing_date DESC NULLS LAST
-            LIMIT 1
-        ) latest_event ON true
-        {where}
-        ORDER BY p.updated_at DESC
-        LIMIT ${len(params) - 1} OFFSET ${len(params)}
-        """,
+        f"{_PROPERTY_SELECT}{extra} ORDER BY p.updated_at DESC LIMIT ${len(params) - 1} OFFSET ${len(params)}",
         *params,
     )
     return [_row_to_property(r) for r in rows]
@@ -94,21 +85,7 @@ async def get_property(property_id: str, pool: asyncpg.Pool = Depends(_get_pool)
         raise HTTPException(status_code=400, detail="Invalid property ID format")
 
     row = await pool.fetchrow(
-        """
-        SELECT
-            p.id, p.apn, p.address, p.city, p.county, p.state, p.zip_code,
-            p.owner_name, p.created_at, p.updated_at,
-            COALESCE(latest_event.event_type, 'foreclosure') AS distress_type
-        FROM properties p
-        LEFT JOIN LATERAL (
-            SELECT event_type
-            FROM events
-            WHERE property_id = p.id
-            ORDER BY filing_date DESC NULLS LAST
-            LIMIT 1
-        ) latest_event ON true
-        WHERE p.id = $1
-        """,
+        f"{_PROPERTY_SELECT} AND p.id = $1",
         property_id,
     )
     if not row:
@@ -134,16 +111,8 @@ async def create_property(payload: PropertyCreate, pool: asyncpg.Pool = Depends(
         property_data=property_data,
     )
     row = await pool.fetchrow(
-        """
-        SELECT
-            p.id, p.apn, p.address, p.city, p.county, p.state, p.zip_code,
-            p.owner_name, p.created_at, p.updated_at,
-            $2::text AS distress_type
-        FROM properties p
-        WHERE p.id = $1
-        """,
+        f"{_PROPERTY_SELECT} AND p.id = $1",
         property_id,
-        payload.distress_type.value,
     )
     if not row:
         raise HTTPException(status_code=500, detail="Failed to retrieve created property")
@@ -157,6 +126,9 @@ async def delete_property(property_id: str, pool: asyncpg.Pool = Depends(_get_po
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid property ID format")
 
-    result = await pool.execute("DELETE FROM properties WHERE id = $1", property_id)
-    if result == "DELETE 0":
+    result = await pool.execute(
+        "UPDATE properties SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL",
+        property_id,
+    )
+    if result == "UPDATE 0":
         raise HTTPException(status_code=404, detail="Property not found")

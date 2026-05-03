@@ -1,4 +1,10 @@
 -- Migration 003: Scoring outputs
+--
+-- Append-only by design: each scoring run inserts a new row rather than
+-- updating in place. This preserves score history for trend analysis and
+-- audit purposes. The `latest_property_scores` view below exposes the
+-- most recent row per property for dashboard queries.
+-- Scoring engines should INSERT, never UPDATE; use the view to read.
 
 CREATE TABLE IF NOT EXISTS property_scores (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

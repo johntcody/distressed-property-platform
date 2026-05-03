@@ -87,9 +87,9 @@ async def _process_county(county_name: str) -> Dict[str, Any]:
 async def _run(event: Dict[str, Any]) -> Dict[str, Any]:
     county = event.get("county", "all")
     counties = [c.name for c in PREFORECLOSURE_COUNTY_CONFIGS] if county == "all" else [county]
-    results = [await _process_county(name) for name in counties]
+    results = await asyncio.gather(*[_process_county(name) for name in counties])
     await close_pool()
-    return {"results": results}
+    return {"results": list(results)}
 
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:

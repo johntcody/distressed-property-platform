@@ -17,8 +17,8 @@ _RE_ADDRESS   = re.compile(
     r"\b(\d{1,5}\s+[A-Z][^\n,]{3,60}(?:St|Ave|Rd|Dr|Ln|Blvd|Way|Ct|Cir|Trl)[^\n,]{0,20})",
     re.I,
 )
-_RE_BORROWER  = re.compile(r"(?:Plaintiff|Grantor|Borrower|Defendant)[:\s]+([A-Z][^\n,]{3,60})", re.I)
-_RE_LENDER    = re.compile(r"(?:Defendant|Lender|Beneficiary|Bank)[:\s]+([A-Z][^\n,]{3,60})", re.I)
+_RE_BORROWER  = re.compile(r"(?:Plaintiff|Grantor|Borrower)[:\s]+([A-Z][^\n,]{3,60})", re.I)
+_RE_LENDER    = re.compile(r"(?:Lender|Beneficiary|Bank|Mortgagee)[:\s]+([A-Z][^\n,]{3,60})", re.I)
 
 
 def _parse_date(raw: str) -> Optional[date]:

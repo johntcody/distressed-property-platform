@@ -24,7 +24,8 @@ CREATE TABLE IF NOT EXISTS properties (
     improvement_value NUMERIC(14, 2),
     legal_description TEXT,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    deleted_at      TIMESTAMPTZ                         -- soft-delete; NULL = active
 );
 
 CREATE INDEX idx_properties_county  ON properties (county);
