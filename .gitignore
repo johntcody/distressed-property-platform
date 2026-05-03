@@ -39,3 +39,4 @@ Thumbs.db
 # Node (for future frontend)
 node_modules/
 .next/
+pr_comments.json
