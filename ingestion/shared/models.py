@@ -6,7 +6,7 @@ from datetime import date
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class DistressEventType(str, Enum):
@@ -69,15 +69,16 @@ class ForeclosureEvent(BaseModel):
     raw_data: Optional[Dict[str, Any]] = None
 
     @property
-    def dedup_key(self) -> str:
-        parts = [
-            self.county,
-            self.event_type.value,
-            str(self.filing_date or ""),
-            (self.borrower_name or "").lower().strip(),
-            (self.address or "").lower().strip(),
-        ]
-        return "|".join(parts)
+    def dedup_key(self) -> Optional[str]:
+        # Require at least filing_date and one identifying field to avoid collisions
+        # on records where key source fields are missing.
+        if not self.filing_date:
+            return None
+        borrower = (self.borrower_name or "").lower().strip()
+        address = (self.address or "").lower().strip()
+        if not borrower and not address:
+            return None
+        return "|".join([self.county, self.event_type.value, str(self.filing_date), borrower, address])
 
 
 class TaxDelinquencyEvent(BaseModel):
@@ -93,14 +94,13 @@ class TaxDelinquencyEvent(BaseModel):
     raw_data: Optional[Dict[str, Any]] = None
 
     @property
-    def dedup_key(self) -> str:
-        parts = [
-            self.county,
-            self.event_type.value,
-            str(self.filing_date or ""),
-            (self.apn or self.address or "").lower().strip(),
-        ]
-        return "|".join(parts)
+    def dedup_key(self) -> Optional[str]:
+        if not self.filing_date:
+            return None
+        identifier = (self.apn or self.address or "").lower().strip()
+        if not identifier:
+            return None
+        return "|".join([self.county, self.event_type.value, str(self.filing_date), identifier])
 
 
 class ProbateEvent(BaseModel):
@@ -115,13 +115,10 @@ class ProbateEvent(BaseModel):
     raw_data: Optional[Dict[str, Any]] = None
 
     @property
-    def dedup_key(self) -> str:
-        parts = [
-            self.county,
-            self.event_type.value,
-            (self.case_number or "").strip(),
-        ]
-        return "|".join(parts)
+    def dedup_key(self) -> Optional[str]:
+        if not self.case_number or not self.case_number.strip():
+            return None
+        return "|".join([self.county, self.event_type.value, self.case_number.strip()])
 
 
 class PreforeclosureEvent(BaseModel):
@@ -138,11 +135,10 @@ class PreforeclosureEvent(BaseModel):
     raw_data: Optional[Dict[str, Any]] = None
 
     @property
-    def dedup_key(self) -> str:
-        parts = [
-            self.county,
-            self.event_type.value,
-            (self.lp_instrument_number or "").strip(),
-            str(self.filing_date or ""),
-        ]
-        return "|".join(parts)
+    def dedup_key(self) -> Optional[str]:
+        instrument = (self.lp_instrument_number or "").strip()
+        if not instrument and not self.filing_date:
+            return None
+        if not instrument:
+            return None
+        return "|".join([self.county, self.event_type.value, instrument, str(self.filing_date or "")])

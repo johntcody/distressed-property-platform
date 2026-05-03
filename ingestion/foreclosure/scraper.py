@@ -1,6 +1,5 @@
 """Foreclosure scraper — discovers and downloads county clerk posting PDFs."""
 
-import io
 import logging
 import re
 from typing import List, Tuple

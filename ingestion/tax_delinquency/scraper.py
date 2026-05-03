@@ -1,7 +1,7 @@
 """Tax delinquency scraper — fetches delinquent roll data from county CAD sites."""
 
 import logging
-from typing import Optional, Tuple
+from typing import Tuple
 
 import httpx
 

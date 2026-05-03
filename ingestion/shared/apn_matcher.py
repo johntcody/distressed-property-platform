@@ -81,7 +81,7 @@ async def match_or_create_property(
         if pid:
             return pid
 
-    # 3. Create new property record
+    # 3. Create new property record — normalize county to lowercase for consistency
     property_data.setdefault("address_norm", address_norm)
-    property_data.setdefault("county", county)
+    property_data["county"] = county.lower()
     return await upsert_property(pool, property_data)

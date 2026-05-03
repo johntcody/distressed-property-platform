@@ -4,12 +4,9 @@ and foreclosure-related civil filings.
 """
 
 import logging
-import re
 from typing import List, Tuple
-from urllib.parse import urlencode
 
 import httpx
-from bs4 import BeautifulSoup
 
 from .config import LP_KEYWORDS, PreforeclosureCountyConfig
 
@@ -53,16 +50,17 @@ class PreforeclosureScraper:
 
     async def run(self) -> List[SearchResult]:
         """Search each keyword; return list of (html_bytes, keyword) tuples."""
+        keywords = self.config.search_keywords or LP_KEYWORDS
         results: List[SearchResult] = []
         async with httpx.AsyncClient(headers=_HEADERS, follow_redirects=True) as client:
-            for keyword in LP_KEYWORDS:
+            for keyword in keywords:
                 html = await self._search_keyword(client, keyword)
                 if html:
                     results.append((html, keyword))
         log.info(
             "County %s: completed %d keyword search(es), %d returned results",
             self.config.name,
-            len(LP_KEYWORDS),
+            len(keywords),
             len(results),
         )
         return results

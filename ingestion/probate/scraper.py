@@ -11,10 +11,6 @@ Anti-captcha note:
   Odyssey does not use CAPTCHA on most Texas county portals, but it does
   rate-limit by IP. A 2-second delay between requests is included. If a county
   starts returning 403/503, fall back to ProbateStrategy.manual and log a warning.
-
-Playwright fallback:
-  Set env var PROBATE_USE_PLAYWRIGHT=1 to switch to browser-based scraping for
-  counties that require JS rendering or session cookies.
 """
 
 import asyncio
@@ -39,7 +35,6 @@ _HEADERS = {
     "Content-Type": "application/x-www-form-urlencoded",
 }
 
-_USE_PLAYWRIGHT = os.getenv("PROBATE_USE_PLAYWRIGHT", "0") == "1"
 _SEARCH_WINDOW_DAYS = int(os.getenv("PROBATE_SEARCH_WINDOW_DAYS", "7"))
 
 
@@ -130,7 +125,7 @@ class OdysseyProbateScraper:
             if not viewstate.get("__VIEWSTATE"):
                 log.warning(
                     "Could not extract ViewState for %s — page may require JS rendering. "
-                    "Set PROBATE_USE_PLAYWRIGHT=1 to enable browser fallback.",
+                    "Switch county to ProbateStrategy.manual if this persists.",
                     self.config.name,
                 )
                 return []

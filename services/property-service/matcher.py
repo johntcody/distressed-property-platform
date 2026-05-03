@@ -41,9 +41,20 @@ async def find_duplicate_property(
 
     if address_norm:
         key = _street_key(address_norm)
+        # Extract street number to narrow candidates DB-side before Python comparison.
+        # This avoids loading the full county into memory (O(N) → O(candidates)).
+        number_match = re.match(r"^\d+", address_norm.strip())
+        street_number = number_match.group(0) if number_match else ""
         rows = await pool.fetch(
-            "SELECT id, address_norm FROM properties WHERE county = $1 AND address_norm IS NOT NULL",
+            """
+            SELECT id, address_norm FROM properties
+            WHERE county = $1
+              AND address_norm IS NOT NULL
+              AND ($2 = '' OR address_norm LIKE $3)
+            """,
             county.lower(),
+            street_number,
+            f"{street_number}%",
         )
         for row in rows:
             if _street_key(row["address_norm"]) == key:
