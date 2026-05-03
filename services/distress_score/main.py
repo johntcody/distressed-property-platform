@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timezone
@@ -40,34 +41,55 @@ async def _get_pool(request) -> asyncpg.Pool:
 
 async def _fetch_signals(pool: asyncpg.Pool, property_id: UUID) -> DistressSignals:
     """Query the events table and build a DistressSignals object."""
-    rows = await pool.fetch(
+    signals = DistressSignals()
+
+    # Most-recent foreclosure stage (ordered by filing_date)
+    fc_row = await pool.fetchrow(
         """
-        SELECT event_type, foreclosure_stage, years_delinquent, filing_date
+        SELECT foreclosure_stage
         FROM   events
-        WHERE  property_id = $1
+        WHERE  property_id = $1 AND event_type = 'foreclosure'
         ORDER  BY filing_date DESC NULLS LAST
+        LIMIT  1
         """,
         property_id,
     )
+    if fc_row:
+        signals.foreclosure_stage = fc_row["foreclosure_stage"]
 
-    signals = DistressSignals()
+    # MAX years_delinquent across all tax records — avoids taking a re-filed
+    # lower count when an older record has a higher delinquency value.
+    tax_row = await pool.fetchrow(
+        """
+        SELECT MAX(years_delinquent) AS years_delinquent
+        FROM   events
+        WHERE  property_id = $1 AND event_type = 'tax_delinquency'
+        """,
+        property_id,
+    )
+    if tax_row:
+        signals.years_delinquent = tax_row["years_delinquent"]
 
-    for row in rows:
-        etype = row["event_type"]
+    # Probate: any active probate record is sufficient
+    signals.has_active_probate = await pool.fetchval(
+        "SELECT EXISTS(SELECT 1 FROM events WHERE property_id = $1 AND event_type = 'probate')",
+        property_id,
+    )
 
-        if etype == "foreclosure" and signals.foreclosure_stage is None:
-            signals.foreclosure_stage = row["foreclosure_stage"]
-
-        elif etype == "tax_delinquency" and signals.years_delinquent is None:
-            signals.years_delinquent = row["years_delinquent"]
-
-        elif etype == "probate":
-            signals.has_active_probate = True
-
-        elif etype == "preforeclosure" and signals.lp_filing_date is None:
-            fd = row["filing_date"]
-            if fd:
-                signals.lp_filing_date = fd if isinstance(fd, date) else fd.date()
+    # Most-recent Lis Pendens filing date
+    lp_row = await pool.fetchrow(
+        """
+        SELECT filing_date
+        FROM   events
+        WHERE  property_id = $1 AND event_type = 'preforeclosure'
+        ORDER  BY filing_date DESC NULLS LAST
+        LIMIT  1
+        """,
+        property_id,
+    )
+    if lp_row and lp_row["filing_date"]:
+        fd = lp_row["filing_date"]
+        signals.lp_filing_date = fd if isinstance(fd, date) else fd.date()
 
     return signals
 
@@ -91,10 +113,12 @@ async def _persist_score(
         result.score,
         result.score_version,
         calculated_at,
-        f'{{"foreclosure":{result.foreclosure_component},'
-        f'"tax":{result.tax_component},'
-        f'"preforeclosure":{result.preforeclosure_component},'
-        f'"probate":{result.probate_component}}}',
+        json.dumps({
+            "foreclosure":    result.foreclosure_component,
+            "tax":            result.tax_component,
+            "preforeclosure": result.preforeclosure_component,
+            "probate":        result.probate_component,
+        }),
     )
     return row["id"]
 
@@ -152,6 +176,13 @@ async def get_latest_score(property_id: UUID):
     """Return the most-recent distress score for a property."""
     pool = app.state.pool
 
+    # Check property existence first so callers can distinguish 404 reasons.
+    exists = await pool.fetchval(
+        "SELECT 1 FROM properties WHERE id = $1 AND deleted_at IS NULL", property_id
+    )
+    if not exists:
+        raise HTTPException(status_code=404, detail="Property not found")
+
     row = await pool.fetchrow(
         """
         SELECT id, distress_score, score_version, calculated_at, raw_data
@@ -161,7 +192,7 @@ async def get_latest_score(property_id: UUID):
         property_id,
     )
     if not row:
-        raise HTTPException(status_code=404, detail="No score found for this property")
+        raise HTTPException(status_code=404, detail="Property exists but has not been scored yet")
 
     raw = row["raw_data"] or {}
     return ScoreResponse(
