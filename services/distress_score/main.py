@@ -10,7 +10,7 @@ from typing import Optional
 from uuid import UUID
 
 import asyncpg
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 
 from .models import ScoreHistoryItem, ScoreHistoryResponse, ScoreRequest, ScoreResponse
 from .scorer import DistressScorer, DistressSignals
@@ -70,9 +70,17 @@ async def _fetch_signals(pool: asyncpg.Pool, property_id: UUID) -> DistressSigna
     if tax_row:
         signals.years_delinquent = tax_row["years_delinquent"]
 
-    # Probate: any active probate record is sufficient
+    # Probate: treat as active only if a probate event was filed within the last 2 years.
+    # Older closed/discharged probate cases should not permanently inflate the score.
     signals.has_active_probate = await pool.fetchval(
-        "SELECT EXISTS(SELECT 1 FROM events WHERE property_id = $1 AND event_type = 'probate')",
+        """
+        SELECT EXISTS(
+            SELECT 1 FROM events
+            WHERE  property_id = $1
+              AND  event_type = 'probate'
+              AND  filing_date >= CURRENT_DATE - INTERVAL '2 years'
+        )
+        """,
         property_id,
     )
 
@@ -145,11 +153,12 @@ async def score_property(property_id: UUID, body: ScoreRequest = ScoreRequest())
     # Build signals: DB events first, then overlay any explicit overrides from body
     signals = await _fetch_signals(pool, property_id)
     if body.foreclosure_stage is not None:
-        signals.foreclosure_stage = body.foreclosure_stage
+        signals.foreclosure_stage = body.foreclosure_stage.value
     if body.years_delinquent is not None:
         signals.years_delinquent = body.years_delinquent
-    if body.has_active_probate:
-        signals.has_active_probate = True
+    # Always apply the probate override so callers can explicitly clear it (False)
+    if body.has_active_probate is not None:
+        signals.has_active_probate = body.has_active_probate
     if body.lp_filing_date is not None:
         signals.lp_filing_date = body.lp_filing_date
     if body.as_of is not None:
@@ -208,9 +217,18 @@ async def get_latest_score(property_id: UUID):
 
 
 @app.get("/api/v1/score/{property_id}/history", response_model=ScoreHistoryResponse)
-async def get_score_history(property_id: UUID, limit: int = 50):
+async def get_score_history(
+    property_id: UUID,
+    limit: int = Query(50, ge=1, le=500),
+):
     """Return the full score history for a property (newest first)."""
     pool = app.state.pool
+
+    exists = await pool.fetchval(
+        "SELECT 1 FROM properties WHERE id = $1 AND deleted_at IS NULL", property_id
+    )
+    if not exists:
+        raise HTTPException(status_code=404, detail="Property not found")
 
     rows = await pool.fetch(
         """

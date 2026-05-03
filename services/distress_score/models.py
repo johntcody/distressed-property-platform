@@ -8,11 +8,13 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from ingestion.shared.models import ForeclosureStage
+
 
 class ScoreRequest(BaseModel):
     """Optional overrides for on-demand rescoring without a full DB fetch."""
 
-    foreclosure_stage: Optional[str] = Field(None, description="NOD | NTS | auction | REO")
+    foreclosure_stage: Optional[ForeclosureStage] = None
     years_delinquent: Optional[int] = Field(None, ge=0)
     has_active_probate: bool = False
     lp_filing_date: Optional[date] = None
