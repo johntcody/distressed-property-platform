@@ -76,7 +76,7 @@ These are not code tasks but must be resolved before the phases that depend on t
 | 1.3 — Tax delinquency scraper | **Complete** — `ingestion/tax_delinquency/` |
 | 1.4 — Pre-foreclosure scraper | **Complete** — `ingestion/preforeclosure/` |
 | 1.5 — Probate scraper | **Complete** — `ingestion/probate/` (Burnet + Lee = manual fallback) |
-| 2.1 — Distress score engine | Not started |
+| 2.1 — Distress score engine | **Complete** — `services/distress-score/` |
 | 2.2 — Equity estimation engine | Not started |
 | 2.3 — Market score engine | Not started |
 | 3.1 — ARV calculator | Not started |

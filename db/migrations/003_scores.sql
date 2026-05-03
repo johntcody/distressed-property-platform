@@ -17,7 +17,8 @@ CREATE TABLE IF NOT EXISTS property_scores (
     estimated_liens NUMERIC(14, 2),
     tax_owed        NUMERIC(14, 2),
     score_version   TEXT NOT NULL DEFAULT '1.0',
-    calculated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    calculated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    raw_data        JSONB                               -- per-component breakdown
 );
 
 CREATE INDEX idx_scores_property_id   ON property_scores (property_id);
