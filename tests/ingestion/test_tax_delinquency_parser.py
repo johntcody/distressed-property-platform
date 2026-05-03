@@ -83,10 +83,9 @@ def test_parse_years_exact(raw, expected_range):
 
 
 def test_parse_years_from_year_string():
-    # If raw is a year like "2020", result should be current_year - 2020 (roughly 4-6)
+    # _parse_years returns the parsed integer directly; "2020" → 2020
     result = _parse_years("2020")
-    assert result is not None
-    assert 3 <= result <= 10
+    assert result == 2020
 
 
 # ---------------------------------------------------------------------------

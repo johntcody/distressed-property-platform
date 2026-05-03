@@ -38,7 +38,7 @@ def test_detect_keywords_finds_lis_pendens():
 
 
 def test_detect_keywords_returns_empty_for_unrelated():
-    assert _detect_keywords("Regular civil case with no foreclosure terms") == []
+    assert _detect_keywords("Regular civil case: boundary dispute between neighbors") == []
 
 
 # ---------------------------------------------------------------------------

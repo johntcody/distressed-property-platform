@@ -60,7 +60,7 @@ def test_first_match_trustee():
 
 
 def test_first_match_returns_none_when_no_match():
-    assert _first_match(_RE_BORROWER, "No grantor here") is None
+    assert _first_match(_RE_BORROWER, "No relevant parties in this notice") is None
 
 
 # ---------------------------------------------------------------------------
