@@ -68,14 +68,14 @@ These are not code tasks but must be resolved before the phases that depend on t
 
 | Phase | Status |
 |---|---|
-| 0.1 — Database schema | Complete |
+| 0.1 — Database schema | Complete — `db/migrations/001–005` |
 | 0.2 — Repo scaffolding | Complete |
 | 0.3 — CAD data ingestion | Complete |
-| 1.1 — Foreclosure scraper | Not started |
-| 1.2 — Property normalization | Not started |
-| 1.3 — Tax delinquency scraper | Not started |
-| 1.4 — Pre-foreclosure scraper | Not started |
-| 1.5 — Probate scraper | Not started |
+| 1.1 — Foreclosure scraper | **Complete** — `ingestion/foreclosure/` |
+| 1.2 — Property normalization | **Complete** — `services/property-service/normalizer.py` |
+| 1.3 — Tax delinquency scraper | **Complete** — `ingestion/tax_delinquency/` |
+| 1.4 — Pre-foreclosure scraper | **Complete** — `ingestion/preforeclosure/` |
+| 1.5 — Probate scraper | **Complete** — `ingestion/probate/` (Burnet + Lee = manual fallback) |
 | 2.1 — Distress score engine | Not started |
 | 2.2 — Equity estimation engine | Not started |
 | 2.3 — Market score engine | Not started |
