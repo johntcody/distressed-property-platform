@@ -76,7 +76,7 @@ class TestAmortization:
         )
         assert bal == pytest.approx(50_000, rel=1e-6)
 
-    def test_standard_mortgage_midpoint_less_than_half(self):
+    def test_standard_mortgage_midpoint_greater_than_half(self):
         # On a standard amortizing loan, mid-point balance > 50% of original
         # because early payments are mostly interest.
         bal = calc.estimate_loan_balance(

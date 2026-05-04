@@ -12,9 +12,9 @@ from pydantic import BaseModel, Field
 class EquityRequest(BaseModel):
     """Optional overrides for on-demand recalculation without a full DB fetch."""
 
-    avm: Optional[float] = Field(None, gt=0, description="Automated valuation model override")
+    avm: Optional[float] = Field(None, ge=0, description="Automated valuation model override")
     original_loan_amount: Optional[float] = Field(None, ge=0)
-    annual_rate: Optional[float] = Field(None, gt=0, le=1, description="Annual interest rate as decimal (e.g. 0.07)")
+    annual_rate: Optional[float] = Field(None, ge=0, le=1, description="Annual interest rate as decimal (e.g. 0.07)")
     term_months: Optional[int] = Field(None, gt=0, le=600)
     months_elapsed: Optional[int] = Field(None, ge=0)
     tax_owed: Optional[float] = Field(None, ge=0)
