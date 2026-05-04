@@ -42,10 +42,17 @@ app = FastAPI(title="Equity Engine", version="1.0.0", lifespan=lifespan)
 
 # ── helpers ────────────────────────────────────────────────────────────────────
 
-async def _fetch_equity_inputs(pool: asyncpg.Pool, property_id: UUID) -> EquityInputs:
-    """Build EquityInputs from DB signals."""
+async def _fetch_equity_inputs(
+    pool: asyncpg.Pool, property_id: UUID
+) -> tuple[EquityInputs, bool]:
+    """Build EquityInputs from DB signals.
 
-    # AVM stub: CAD assessed value (land + improvement)
+    Returns (inputs, property_exists). Callers must check the bool and raise
+    404 if False — this avoids a second round-trip to the properties table.
+    """
+
+    # AVM stub: CAD assessed value (land + improvement).
+    # Also serves as the existence + soft-delete check.
     prop = await pool.fetchrow(
         """
         SELECT land_value, improvement_value
@@ -54,8 +61,11 @@ async def _fetch_equity_inputs(pool: asyncpg.Pool, property_id: UUID) -> EquityI
         """,
         property_id,
     )
-    land = float(prop["land_value"] or 0) if prop else 0.0
-    improvement = float(prop["improvement_value"] or 0) if prop else 0.0
+    if prop is None:
+        return EquityInputs(avm=0.0), False
+
+    land = float(prop["land_value"] or 0)
+    improvement = float(prop["improvement_value"] or 0)
     avm = land + improvement
 
     # Most-recent loan amount from any distress event
@@ -81,17 +91,24 @@ async def _fetch_equity_inputs(pool: asyncpg.Pool, property_id: UUID) -> EquityI
             delta = date.today() - filing
             months_elapsed = max(int(delta.days / 30.44), 0)
 
-    # Total outstanding tax owed (sum across all tax_delinquency events)
+    # Total outstanding tax owed.
+    # Deduplicate on dedup_key to avoid double-counting re-ingested events;
+    # fall back to the raw amount for rows where dedup_key is NULL.
     tax_row = await pool.fetchrow(
         """
         SELECT COALESCE(SUM(tax_amount_owed), 0) AS tax_owed
-        FROM   events
-        WHERE  property_id = $1 AND event_type = 'tax_delinquency'
-          AND  tax_amount_owed IS NOT NULL
+        FROM (
+            SELECT DISTINCT ON (COALESCE(dedup_key, id::text)) tax_amount_owed
+            FROM   events
+            WHERE  property_id = $1
+              AND  event_type = 'tax_delinquency'
+              AND  tax_amount_owed IS NOT NULL
+            ORDER  BY COALESCE(dedup_key, id::text), filing_date DESC NULLS LAST
+        ) deduped
         """,
         property_id,
     )
-    tax_owed = float(tax_row["tax_owed"]) if tax_row else 0.0
+    tax_owed = float(tax_row["tax_owed"])
 
     return EquityInputs(
         avm=avm,
@@ -100,7 +117,7 @@ async def _fetch_equity_inputs(pool: asyncpg.Pool, property_id: UUID) -> EquityI
         term_months=_DEFAULT_TERM_MONTHS,
         months_elapsed=months_elapsed,
         tax_owed=tax_owed,
-    )
+    ), True
 
 
 async def _persist_equity(
@@ -141,13 +158,9 @@ async def calculate_equity(property_id: UUID, body: EquityRequest = EquityReques
     """Compute equity for a property and persist it."""
     pool = app.state.pool
 
-    exists = await pool.fetchval(
-        "SELECT 1 FROM properties WHERE id = $1 AND deleted_at IS NULL", property_id
-    )
+    inputs, exists = await _fetch_equity_inputs(pool, property_id)
     if not exists:
         raise HTTPException(status_code=404, detail="Property not found")
-
-    inputs = await _fetch_equity_inputs(pool, property_id)
 
     # Apply caller overrides
     if body.avm is not None:
@@ -190,13 +203,19 @@ async def get_latest_equity(property_id: UUID):
     if not exists:
         raise HTTPException(status_code=404, detail="Property not found")
 
+    # Query property_scores directly so the equity_amount IS NOT NULL filter
+    # is applied before ORDER BY, not after DISTINCT ON in the shared view.
+    # The shared view picks the latest row overall; if that row is a
+    # distress-only score, equity_amount would be NULL and we'd get a false 404.
     row = await pool.fetchrow(
         """
         SELECT id, avm, estimated_liens, tax_owed, equity_amount,
                equity_pct, score_version, calculated_at
-        FROM   latest_property_scores
+        FROM   property_scores
         WHERE  property_id = $1
           AND  equity_amount IS NOT NULL
+        ORDER  BY calculated_at DESC
+        LIMIT  1
         """,
         property_id,
     )

@@ -26,7 +26,7 @@ class EquityResponse(BaseModel):
     estimated_loan_balance: float
     tax_owed: float
     equity_amount: float
-    equity_pct: Optional[float] = Field(description="Equity % of AVM; null when AVM is zero")
+    equity_pct: Optional[float] = Field(None, description="Equity % of AVM; null when AVM is zero")
     calculator_version: str
     calculated_at: datetime
 
