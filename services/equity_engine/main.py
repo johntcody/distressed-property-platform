@@ -64,9 +64,25 @@ async def _fetch_equity_inputs(
     if prop is None:
         return EquityInputs(avm=0.0), False
 
-    land = float(prop["land_value"] or 0)
-    improvement = float(prop["improvement_value"] or 0)
-    avm = land + improvement
+    # AVM: prefer the most recent Estated valuation; fall back to CAD assessed value
+    # when no valuation exists yet (new ingestions, Estated not yet called).
+    valuation_row = await pool.fetchrow(
+        """
+        SELECT avm
+        FROM   valuations
+        WHERE  property_id = $1
+          AND  avm IS NOT NULL
+        ORDER  BY valuation_date DESC NULLS LAST, calculated_at DESC
+        LIMIT  1
+        """,
+        property_id,
+    )
+    if valuation_row and valuation_row["avm"]:
+        avm = float(valuation_row["avm"])
+    else:
+        land = float(prop["land_value"] or 0)
+        improvement = float(prop["improvement_value"] or 0)
+        avm = land + improvement
 
     # Most-recent loan amount from any distress event
     loan_row = await pool.fetchrow(
