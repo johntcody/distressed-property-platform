@@ -38,7 +38,7 @@ skip_no_db = pytest.mark.skipif(
 
 # ── fixtures ──────────────────────────────────────────────────────────────────
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture
 async def pool():
     p = await asyncpg.create_pool(dsn=DATABASE_URL, min_size=1, max_size=3, command_timeout=15)
     yield p
