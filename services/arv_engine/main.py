@@ -11,7 +11,7 @@ from uuid import UUID
 import asyncpg
 from fastapi import FastAPI, HTTPException, Query
 
-from .arv import ARVCalculator, SubjectProperty
+from .arv import ARVCalculator, ARVResult, SubjectProperty
 from .models import ARVHistoryItem, ARVHistoryResponse, ARVRequest, ARVResponse
 
 _calculator = ARVCalculator()
@@ -52,9 +52,10 @@ async def _fetch_subject(
     if row is None:
         return SubjectProperty(property_id=str(property_id), sqft=0, beds=0, baths=0), False
 
-    sqft  = float(overrides.sqft  or row["sqft"]  or 0)
-    beds  = int(  overrides.beds  or row["beds"]  or 0)
-    baths = float(overrides.baths or row["baths"] or 0)
+    # Use is-not-None guards so explicit 0 overrides are honoured
+    sqft  = float(overrides.sqft  if overrides.sqft  is not None else (row["sqft"]  or 0))
+    beds  = int(  overrides.beds  if overrides.beds  is not None else (row["beds"]  or 0))
+    baths = float(overrides.baths if overrides.baths is not None else (row["baths"] or 0))
 
     return SubjectProperty(
         property_id=str(property_id),
@@ -68,24 +69,23 @@ async def _fetch_subject(
 async def _persist_arv(
     pool: asyncpg.Pool,
     property_id: UUID,
-    result,
+    result: ARVResult,
     calculated_at: datetime,
-) -> UUID:
-    row = await pool.fetchrow(
+) -> None:
+    await pool.execute(
         """
         INSERT INTO valuations
-            (property_id, arv, arv_confidence, comp_count, method, calculated_at)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING id
+            (property_id, arv, arv_confidence, comp_count, method, arv_version, calculated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         """,
         property_id,
         result.arv,
         result.arv_confidence,
         result.comp_count,
         result.method,
+        result.arv_version,
         calculated_at,
     )
-    return row["id"]
 
 
 # ── endpoints ─────────────────────────────────────────────────────────────────
@@ -98,12 +98,12 @@ async def health():
 @app.post("/api/v1/arv/{property_id}", response_model=ARVResponse)
 async def calculate_arv(
     property_id: UUID,
-    body: ARVRequest = ARVRequest(),
+    body: Optional[ARVRequest] = None,
 ):
     """Compute ARV for a property and persist it to valuations."""
     pool = app.state.pool
 
-    subject, exists = await _fetch_subject(pool, property_id, body)
+    subject, exists = await _fetch_subject(pool, property_id, body or ARVRequest())
     if not exists:
         raise HTTPException(status_code=404, detail="Property not found")
 
@@ -113,7 +113,11 @@ async def calculate_arv(
             detail="Property has no sqft on record; supply sqft in the request body",
         )
 
-    result = _calculator.estimate(subject)
+    try:
+        result = _calculator.estimate(subject)
+    except NotImplementedError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
     calculated_at = datetime.now(tz=timezone.utc)
     await _persist_arv(pool, property_id, result, calculated_at)
 
@@ -142,7 +146,7 @@ async def get_latest_arv(property_id: UUID):
 
     row = await pool.fetchrow(
         """
-        SELECT id, arv, arv_confidence, comp_count, method, calculated_at
+        SELECT id, arv, arv_confidence, comp_count, method, arv_version, calculated_at
         FROM   valuations
         WHERE  property_id = $1
         ORDER  BY calculated_at DESC
@@ -161,7 +165,7 @@ async def get_latest_arv(property_id: UUID):
         arv_confidence=float(row["arv_confidence"]) if row["arv_confidence"] is not None else 0.0,
         comp_count=row["comp_count"] or 0,
         method=row["method"] or "price_per_sqft",
-        arv_version="1.0",
+        arv_version=row["arv_version"] or "1.0",
         calculated_at=row["calculated_at"],
     )
 

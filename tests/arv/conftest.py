@@ -1,4 +1,4 @@
-"""Ensure repo root is on sys.path so services.arv-engine is importable."""
+"""Ensure repo root is on sys.path so services.arv_engine is importable."""
 
 import sys
 from pathlib import Path
