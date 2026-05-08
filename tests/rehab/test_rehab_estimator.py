@@ -27,7 +27,7 @@ def _expected_total(level: str, sqft: float, overrides: dict | None = None) -> f
     template = dict(_TEMPLATES[level])
     if overrides:
         template.update(overrides)
-    return round(sum(rate * sqft for rate in template.values()), 2)
+    return round(sum(round(rate * sqft, 2) for rate in template.values()), 2)
 
 
 # ── template outputs ──────────────────────────────────────────────────────────

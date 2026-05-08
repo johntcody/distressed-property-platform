@@ -156,7 +156,10 @@ async def get_latest_rehab(property_id: UUID):
             status_code=404, detail="Property exists but has not been rehab-estimated yet"
         )
 
-    notes = json.loads(row["notes"]) if row["notes"] else {}
+    try:
+        notes = json.loads(row["notes"]) if row["notes"] else {}
+    except json.JSONDecodeError:
+        notes = {}
 
     return RehabResponse(
         property_id=property_id,

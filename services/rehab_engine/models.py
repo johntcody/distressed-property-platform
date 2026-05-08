@@ -6,7 +6,9 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+import math
+
+from pydantic import BaseModel, Field, field_validator
 
 
 class RehabRequest(BaseModel):
@@ -21,6 +23,16 @@ class RehabRequest(BaseModel):
         None,
         description="Per-sqft cost overrides keyed by line-item name",
     )
+
+    @field_validator("overrides")
+    @classmethod
+    def overrides_must_be_finite(cls, v: dict[str, float] | None) -> dict[str, float] | None:
+        if v is None:
+            return v
+        bad = [k for k, val in v.items() if not math.isfinite(val)]
+        if bad:
+            raise ValueError(f"override values must be finite; got non-finite for {bad!r}")
+        return v
 
 
 class RehabResponse(BaseModel):
