@@ -60,7 +60,7 @@ These are not code tasks but must be resolved before the phases that depend on t
 | AVM data provider (Attom, CoreLogic, Zillow) | Phase 2.2 |
 | Comp data source for ARV | Phase 3.1 |
 | Odyssey access strategy (scrape vs. manual) | Phase 1.5 |
-| Message queue choice (SQS vs. Kafka) | Phase 4.3 |
+| Message queue choice (SQS vs. Kafka) | ~~Phase 4.3~~ — decided: **SQS** |
 
 ---
 
@@ -84,7 +84,7 @@ These are not code tasks but must be resolved before the phases that depend on t
 | 3.2 — Rehab cost estimator | **Complete** — `services/rehab_engine/`; 3 templates (light/medium/heavy), per-item overrides |
 | 3.3 — MAO calculator | **Complete** — `services/mao_engine/`; formula MAO=(ARV×discount%)−rehab−holding−closing; ARV+rehab pulled from DB |
 | 4.1 — Opportunity Dashboard API | **Complete** — `services/opportunity_dashboard/`; GET /api/v1/opportunities; 5 filters, 5 sort fields, pagination |
-| 4.2 — Property Detail API | Not started |
-| 4.3 — Alert engine | Not started |
+| 4.2 — Property Detail API | **Complete** — `services/property_detail/`; GET /properties/{id}, /events, /analysis, /valuations |
+| 4.3 — Alert engine | **Complete** — `services/alert_engine/`; SQS consumer, matcher, notifier stubs (email/SMS/push), daily digest; migration 013 |
 | 5.1 — Investor pipeline CRUD | Not started |
 | 5.2 — Frontend (Next.js) | Not started |
