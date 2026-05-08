@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -52,26 +53,26 @@ async def _fetch_inputs(
     if not exists:
         return MAOInputs(arv=0, rehab_cost=0), False
 
-    # Latest ARV
-    arv_row = await pool.fetchrow(
-        """
-        SELECT arv FROM valuations
-        WHERE  property_id = $1 AND arv_confidence IS NOT NULL
-        ORDER  BY calculated_at DESC LIMIT 1
-        """,
-        property_id,
-    )
-
-    # Latest rehab cost
-    rehab_row = await pool.fetchrow(
-        """
-        SELECT rehab_cost FROM analysis
-        WHERE  property_id = $1
-          AND  record_type  = 'rehab'
-          AND  rehab_cost  IS NOT NULL
-        ORDER  BY calculated_at DESC LIMIT 1
-        """,
-        property_id,
+    # Fetch ARV and rehab concurrently
+    arv_row, rehab_row = await asyncio.gather(
+        pool.fetchrow(
+            """
+            SELECT arv FROM valuations
+            WHERE  property_id = $1 AND arv_confidence IS NOT NULL
+            ORDER  BY calculated_at DESC LIMIT 1
+            """,
+            property_id,
+        ),
+        pool.fetchrow(
+            """
+            SELECT rehab_cost FROM analysis
+            WHERE  property_id = $1
+              AND  record_type  = 'rehab'
+              AND  rehab_cost  IS NOT NULL
+            ORDER  BY calculated_at DESC LIMIT 1
+            """,
+            property_id,
+        ),
     )
 
     arv = float(
@@ -84,9 +85,9 @@ async def _fetch_inputs(
         if overrides.rehab_cost is not None
         else (rehab_row["rehab_cost"] if rehab_row and rehab_row["rehab_cost"] is not None else 0)
     )
-    discount_pct   = overrides.discount_pct  if overrides.discount_pct  is not None else 70.0
-    holding_costs  = overrides.holding_costs if overrides.holding_costs is not None else 0.0
-    closing_costs  = overrides.closing_costs if overrides.closing_costs is not None else 0.0
+    discount_pct  = overrides.discount_pct  if overrides.discount_pct  is not None else 70.0
+    holding_costs = overrides.holding_costs if overrides.holding_costs is not None else 0.0
+    closing_costs = overrides.closing_costs if overrides.closing_costs is not None else 0.0
 
     return MAOInputs(
         arv=arv,
@@ -106,9 +107,9 @@ async def _persist_mao(
     await pool.execute(
         """
         INSERT INTO analysis
-            (property_id, record_type, arv_used, discount_pct,
+            (property_id, record_type, rehab_level, arv_used, discount_pct,
              rehab_cost, holding_costs, closing_costs, mao, mao_version, calculated_at)
-        VALUES ($1, 'mao', $2, $3, $4, $5, $6, $7, $8, $9)
+        VALUES ($1, 'mao', NULL, $2, $3, $4, $5, $6, $7, $8, $9)
         """,
         property_id,
         result.arv,
@@ -146,6 +147,11 @@ async def calculate_mao(
         raise HTTPException(
             status_code=422,
             detail="No ARV on record for this property; run arv-engine first or supply arv in the request body",
+        )
+    if inputs.rehab_cost == 0 and req.rehab_cost is None:
+        raise HTTPException(
+            status_code=422,
+            detail="No rehab estimate on record for this property; run rehab-engine first or supply rehab_cost in the request body",
         )
 
     try:
@@ -208,7 +214,7 @@ async def get_latest_mao(property_id: UUID):
         holding_costs=float(row["holding_costs"]) if row["holding_costs"] is not None else 0.0,
         closing_costs=float(row["closing_costs"]) if row["closing_costs"] is not None else 0.0,
         mao=float(row["mao"]),
-        mao_version=row["mao_version"] or "1.0",
+        mao_version=row["mao_version"],
         calculated_at=row["calculated_at"],
     )
 
@@ -248,9 +254,9 @@ async def get_mao_history(
     items = [
         MAOHistoryItem(
             id=row["id"],
-            arv_used=float(row["arv_used"])     if row["arv_used"]     is not None else None,
+            arv_used=float(row["arv_used"])         if row["arv_used"]     is not None else None,
             discount_pct=float(row["discount_pct"]) if row["discount_pct"] is not None else None,
-            mao=float(row["mao"])               if row["mao"]          is not None else None,
+            mao=float(row["mao"])                   if row["mao"]          is not None else None,
             calculated_at=row["calculated_at"],
         )
         for row in rows
