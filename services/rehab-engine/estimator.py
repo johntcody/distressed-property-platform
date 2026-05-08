@@ -1,18 +1,3 @@
-"""Rehab cost estimation logic."""
-
-from typing import Dict, Any
-
-
-COST_PER_SQFT = {
-    "light": 15,
-    "moderate": 35,
-    "heavy": 65,
-    "full_gut": 100,
-}
-
-
-class RehabEstimator:
-    def estimate(self, sqft: int, condition: str, extras: Dict[str, Any] = None) -> float:
-        """Estimate rehab cost based on square footage and condition level."""
-        # TODO: implement line-item breakdown (roof, HVAC, plumbing, kitchen, baths)
-        raise NotImplementedError
+# Canonical implementation lives in services/rehab_engine/estimator.py
+# This directory (rehab-engine) is a scaffold placeholder and cannot be
+# imported as a Python package due to the hyphen in its name.
