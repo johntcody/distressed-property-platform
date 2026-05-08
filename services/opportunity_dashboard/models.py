@@ -8,6 +8,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+CaseType  = Literal["foreclosure", "tax_delinquency", "probate", "preforeclosure"]
 SortField = Literal["distress_score", "equity_pct", "auction_date", "filing_date", "mao"]
 SortDir   = Literal["asc", "desc"]
 

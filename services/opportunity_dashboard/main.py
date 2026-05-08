@@ -11,7 +11,7 @@ import asyncio
 import asyncpg
 from fastapi import FastAPI, Query
 
-from .models import OpportunitiesResponse, OpportunityItem, SortDir, SortField
+from .models import CaseType, OpportunitiesResponse, OpportunityItem, SortDir, SortField
 from .query import build_query
 
 _pool: Optional[asyncpg.Pool] = None
@@ -38,8 +38,8 @@ async def health():
 
 @app.get("/api/v1/opportunities", response_model=OpportunitiesResponse)
 async def list_opportunities(
-    county:              Optional[str]   = Query(None, description="Filter by county name"),
-    case_type:           Optional[str]   = Query(None, description="foreclosure | tax_delinquency | probate | preforeclosure"),
+    county:              Optional[str]      = Query(None, description="Filter by county name (case-insensitive)"),
+    case_type:           Optional[CaseType] = Query(None, description="foreclosure | tax_delinquency | probate | preforeclosure"),
     min_distress_score:  Optional[float] = Query(None, ge=0, le=100, description="Minimum distress score (0–100)"),
     min_equity_pct:      Optional[float] = Query(None, description="Minimum equity percentage"),
     auction_date_before: Optional[date]  = Query(None, description="Only properties with auction_date ≤ this date"),
@@ -52,7 +52,7 @@ async def list_opportunities(
     offset = (page - 1) * page_size
 
     data_sql, data_params, count_sql, count_params = build_query(
-        county=county,
+        county=county.lower() if county else None,
         case_type=case_type,
         min_distress_score=min_distress_score,
         min_equity_pct=min_equity_pct,
