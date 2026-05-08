@@ -94,7 +94,9 @@ def _filter_comps(subject: SubjectProperty, comps: list[Comp]) -> list[Comp]:
 
     return [
         c for c in comps
-        if c.beds == subject.beds
+        if c.sqft > 0                      # guard against provider data quality issues
+        and c.distance_miles >= 0
+        and c.beds == subject.beds
         and c.baths == subject.baths
         and sqft_lo <= c.sqft <= sqft_hi
         and c.sale_date >= cutoff

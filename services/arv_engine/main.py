@@ -149,6 +149,7 @@ async def get_latest_arv(property_id: UUID):
         SELECT id, arv, arv_confidence, comp_count, method, arv_version, calculated_at
         FROM   valuations
         WHERE  property_id = $1
+          AND  arv_confidence IS NOT NULL
         ORDER  BY calculated_at DESC
         LIMIT  1
         """,
@@ -193,6 +194,7 @@ async def get_arv_history(
         SELECT id, arv, arv_confidence, comp_count, method, calculated_at
         FROM   valuations
         WHERE  property_id = $1
+          AND  arv_confidence IS NOT NULL
         ORDER  BY calculated_at DESC
         LIMIT  $2
         """,
