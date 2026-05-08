@@ -23,7 +23,7 @@ estimator = RehabEstimator()
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
-def _expected_total(level: str, sqft: float, overrides: dict = None) -> float:
+def _expected_total(level: str, sqft: float, overrides: dict | None = None) -> float:
     template = dict(_TEMPLATES[level])
     if overrides:
         template.update(overrides)
@@ -131,6 +131,18 @@ class TestValidation:
     def test_negative_sqft_raises(self):
         with pytest.raises(ValueError, match="sqft"):
             estimator.estimate(RehabInputs(sqft=-500, rehab_level="light"))
+
+    def test_negative_override_rate_raises(self):
+        with pytest.raises(ValueError, match="non-negative"):
+            estimator.estimate(RehabInputs(
+                sqft=1000, rehab_level="medium", overrides={"hvac": -1.0}
+            ))
+
+    def test_negative_override_error_names_the_bad_key(self):
+        with pytest.raises(ValueError, match="hvac"):
+            estimator.estimate(RehabInputs(
+                sqft=1000, rehab_level="medium", overrides={"hvac": -5.0}
+            ))
 
 
 # ── metadata ─────────────────────────────────────────────────────────────────

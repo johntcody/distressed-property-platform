@@ -24,7 +24,6 @@ RehabResult contains:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 # ── default cost-per-sqft templates ──────────────────────────────────────────
@@ -108,6 +107,9 @@ class RehabEstimator:
             )
         if inputs.sqft <= 0:
             raise ValueError(f"sqft must be positive, got {inputs.sqft}")
+        negative = [k for k, v in inputs.overrides.items() if v < 0]
+        if negative:
+            raise ValueError(f"override rates must be non-negative; got negative values for {negative!r}")
 
         template = dict(_TEMPLATES[inputs.rehab_level])
         template.update(inputs.overrides)   # caller overrides replace defaults

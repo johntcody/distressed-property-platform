@@ -49,7 +49,7 @@ async def _fetch_inputs(
     if row is None:
         return RehabInputs(sqft=0), False
 
-    sqft        = float(overrides.sqft        if overrides.sqft        is not None else (row["sqft"] or 0))
+    sqft = float(overrides.sqft if overrides.sqft is not None else (row["sqft"] or 0))
     rehab_level = overrides.rehab_level if overrides.rehab_level is not None else "medium"
     item_overrides = overrides.overrides or {}
 
@@ -65,14 +65,19 @@ async def _persist_rehab(
     await pool.execute(
         """
         INSERT INTO analysis
-            (property_id, rehab_level, rehab_cost, rehab_cost_sqft, notes, calculated_at)
-        VALUES ($1, $2, $3, $4, $5, $6)
+            (property_id, record_type, rehab_level, rehab_cost, rehab_cost_sqft,
+             notes, calculated_at)
+        VALUES ($1, 'rehab', $2, $3, $4, $5, $6)
         """,
         property_id,
         result.rehab_level,
         result.total_cost,
         result.cost_per_sqft,
-        json.dumps({"line_items": result.line_items, "rehab_version": result.rehab_version}),
+        json.dumps({
+            "sqft": result.sqft,
+            "line_items": result.line_items,
+            "rehab_version": result.rehab_version,
+        }),
         calculated_at,
     )
 
@@ -139,7 +144,8 @@ async def get_latest_rehab(property_id: UUID):
         SELECT id, rehab_level, rehab_cost, rehab_cost_sqft, notes, calculated_at
         FROM   analysis
         WHERE  property_id = $1
-          AND  rehab_cost IS NOT NULL
+          AND  record_type  = 'rehab'
+          AND  rehab_cost  IS NOT NULL
         ORDER  BY calculated_at DESC
         LIMIT  1
         """,
@@ -155,7 +161,7 @@ async def get_latest_rehab(property_id: UUID):
     return RehabResponse(
         property_id=property_id,
         rehab_level=row["rehab_level"] or "medium",
-        sqft=0.0,   # sqft not stored in analysis; use POST response or /history for full detail
+        sqft=float(notes.get("sqft", 0.0)),
         total_cost=float(row["rehab_cost"]),
         cost_per_sqft=float(row["rehab_cost_sqft"]) if row["rehab_cost_sqft"] else 0.0,
         line_items=notes.get("line_items", {}),
@@ -187,7 +193,8 @@ async def get_rehab_history(
         SELECT id, rehab_level, rehab_cost, rehab_cost_sqft, calculated_at
         FROM   analysis
         WHERE  property_id = $1
-          AND  rehab_cost IS NOT NULL
+          AND  record_type  = 'rehab'
+          AND  rehab_cost  IS NOT NULL
         ORDER  BY calculated_at DESC
         LIMIT  $2
         """,
