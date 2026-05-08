@@ -66,10 +66,16 @@ async def fetch_avm(property_id: UUID, body: AvmRequest):
     except httpx.HTTPStatusError as exc:
         raise HTTPException(
             status_code=502,
-            detail=f"Estated API error: {exc.response.status_code}",
+            detail=f"AVM provider error: {exc.response.status_code}",
         )
     except httpx.RequestError as exc:
-        raise HTTPException(status_code=502, detail=f"Estated API unreachable: {exc}")
+        raise HTTPException(status_code=502, detail=f"AVM provider unreachable: {exc}")
+
+    if result is None:
+        raise HTTPException(
+            status_code=503,
+            detail="No AVM provider configured. Set AVM_PROVIDER=attom and ATTOM_API_KEY.",
+        )
 
     return AvmResponse(
         property_id=property_id,
