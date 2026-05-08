@@ -6,4 +6,4 @@ ALTER TABLE analysis
     ADD COLUMN IF NOT EXISTS mao_version TEXT NOT NULL DEFAULT '1.0',
     ALTER COLUMN rehab_level DROP NOT NULL;
 
-CREATE INDEX IF NOT EXISTS idx_analysis_mao ON analysis (property_id, record_type, mao);
+CREATE INDEX IF NOT EXISTS idx_analysis_mao ON analysis (property_id, record_type, calculated_at DESC);
