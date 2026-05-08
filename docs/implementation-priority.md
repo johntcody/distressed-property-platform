@@ -80,7 +80,7 @@ These are not code tasks but must be resolved before the phases that depend on t
 | 2.2 — Equity estimation engine | **Complete** — `services/equity_engine/` |
 | 2.2.1 — AVM service (Estated) | **Complete** — `services/avm_service/`; equity engine reads `valuations` with CAD fallback |
 | 2.3 — Market score engine | **Complete** — `services/market_score/` |
-| 3.1 — ARV calculator | Not started |
+| 3.1 — ARV calculator | **Complete** — `services/arv_engine/`; stub comp provider; inverse-distance-weighted price/sqft |
 | 3.2 — Rehab cost estimator | Not started |
 | 3.3 — MAO calculator | Not started |
 | 4.1 — Opportunity Dashboard API | Not started |
