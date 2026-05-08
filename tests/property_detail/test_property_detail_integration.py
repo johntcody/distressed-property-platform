@@ -26,6 +26,7 @@ from services.property_detail.queries import (
     EQUITY_SQL,
     EVENTS_SQL,
     PROPERTY_DETAIL_SQL,
+    PROPERTY_EXISTS_SQL,
     VALUATIONS_SQL,
 )
 
@@ -325,3 +326,22 @@ class TestValuationsIntegration:
             assert float(rows[0]["arv"]) == pytest.approx(220000.0)
         finally:
             await _cleanup(pool, pid)
+
+
+# ── PROPERTY_EXISTS_SQL — 404 consistency ─────────────────────────────────────
+
+@skip_no_db
+class TestPropertyExistsIntegration:
+    @pytest.mark.asyncio
+    async def test_returns_row_for_known_property(self, pool):
+        pid = await _insert_property(pool)
+        try:
+            row = await pool.fetchrow(PROPERTY_EXISTS_SQL, pid)
+            assert row is not None
+        finally:
+            await _cleanup(pool, pid)
+
+    @pytest.mark.asyncio
+    async def test_returns_none_for_unknown_property(self, pool):
+        row = await pool.fetchrow(PROPERTY_EXISTS_SQL, uuid.uuid4())
+        assert row is None

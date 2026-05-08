@@ -53,8 +53,13 @@ def _parse_message(body: str) -> Optional[EventMessage]:
         return None
 
 
-async def process_event(pool, sqs_client, event: EventMessage, receipt_handle: str) -> None:
-    subscriptions = await load_active_subscriptions(pool)
+async def process_event(
+    pool,
+    sqs_client,
+    event: EventMessage,
+    receipt_handle: str,
+    subscriptions,           # pre-fetched for the batch; avoids N DB reads per batch
+) -> None:
     matched = match_subscriptions(event, subscriptions)
 
     for sub in matched:
@@ -63,20 +68,21 @@ async def process_event(pool, sqs_client, event: EventMessage, receipt_handle: s
         )
         try:
             dispatch(sub.channel, sub.contact, subject, body)
+            alert = DispatchedAlert(
+                property_id=event.property_id,
+                subscription_id=sub.id,
+                event_id=event.event_id,
+                trigger_type=event.event_type,
+                trigger_score=event.distress_score,
+                channel=sub.channel,
+                contact=sub.contact,
+            )
+            await persist_alert(pool, alert)
         except Exception:
-            logger.exception("Dispatch failed for subscription %s", sub.id)
+            logger.exception(
+                "Failed to dispatch/persist alert for subscription %s", sub.id
+            )
             continue
-
-        alert = DispatchedAlert(
-            property_id=event.property_id,
-            subscription_id=sub.id,
-            event_id=event.event_id,
-            trigger_type=event.event_type,
-            trigger_score=event.distress_score,
-            channel=sub.channel,
-            contact=sub.contact,
-        )
-        await persist_alert(pool, alert)
 
     # Delete from queue only after all processing succeeds
     sqs_client.delete_message(QueueUrl=_QUEUE_URL, ReceiptHandle=receipt_handle)
@@ -88,6 +94,9 @@ async def process_event(pool, sqs_client, event: EventMessage, receipt_handle: s
 
 async def run_consumer(pool) -> None:
     """Poll SQS indefinitely. Intended to run as a long-lived async task."""
+    if not _QUEUE_URL:
+        raise RuntimeError("ALERT_QUEUE_URL environment variable is not set")
+
     import boto3
     sqs = boto3.client("sqs", region_name=os.environ.get("AWS_REGION", "us-east-1"))
     logger.info("Alert consumer started. Queue: %s", _QUEUE_URL)
@@ -99,6 +108,12 @@ async def run_consumer(pool) -> None:
             WaitTimeSeconds=_WAIT_SECONDS,
         )
         messages = response.get("Messages", [])
+        if not messages:
+            continue
+
+        # Load subscriptions once per batch — they change rarely and there
+        # is no benefit to re-querying for each message in the same poll.
+        subscriptions = await load_active_subscriptions(pool)
 
         for msg in messages:
             event = _parse_message(msg["Body"])
@@ -106,4 +121,4 @@ async def run_consumer(pool) -> None:
                 # Poison-pill: delete so it doesn't block the queue
                 sqs.delete_message(QueueUrl=_QUEUE_URL, ReceiptHandle=msg["ReceiptHandle"])
                 continue
-            await process_event(pool, sqs, event, msg["ReceiptHandle"])
+            await process_event(pool, sqs, event, msg["ReceiptHandle"], subscriptions)

@@ -35,11 +35,14 @@ ORDER BY sub.user_id, a.sent_at DESC
 
 @dataclass
 class DigestEntry:
-    user_id:      UUID
-    channel:      str
-    contact:      str
-    alert_count:  int
-    lines:        list[str]   # one summary line per alert
+    user_id:  UUID
+    channel:  str
+    contact:  str
+    lines:    list[str]   # one summary line per alert
+
+    @property
+    def alert_count(self) -> int:
+        return len(self.lines)
 
 
 async def build_digest_rows(pool) -> list[DigestEntry]:
@@ -55,11 +58,9 @@ async def build_digest_rows(pool) -> list[DigestEntry]:
                 user_id=uid,
                 channel=row["channel"],
                 contact=row["contact"],
-                alert_count=0,
                 lines=[],
             )
         entry = by_user[uid]
-        entry.alert_count += 1
         score_str = f"  score {row['trigger_score']:.0f}" if row["trigger_score"] else ""
         entry.lines.append(
             f"• {row['trigger_type'].replace('_', ' ').title()}"

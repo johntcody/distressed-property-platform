@@ -15,16 +15,16 @@ from services.alert_engine.notifier import build_message
 
 class TestFormatDigest:
     def _entry(self, count=3, channel="email"):
+        all_lines = [
+            "• Foreclosure — property abc-123  score 82",
+            "• Tax Delinquency — property def-456",
+            "• Probate — property ghi-789",
+        ]
         return DigestEntry(
             user_id=uuid.uuid4(),
             channel=channel,
             contact="user@example.com",
-            alert_count=count,
-            lines=[
-                "• Foreclosure — property abc-123  score 82",
-                "• Tax Delinquency — property def-456",
-                "• Probate — property ghi-789",
-            ][:count],
+            lines=all_lines[:count],
         )
 
     def test_subject_contains_count(self):

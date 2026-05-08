@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from contextlib import asynccontextmanager
 from typing import Optional
@@ -24,6 +25,7 @@ from .queries import (
     EQUITY_SQL,
     EVENTS_SQL,
     PROPERTY_DETAIL_SQL,
+    PROPERTY_EXISTS_SQL,
     VALUATIONS_SQL,
 )
 
@@ -53,6 +55,13 @@ async def health():
 
 def _not_found(property_id: UUID) -> HTTPException:
     return HTTPException(status_code=404, detail=f"Property {property_id} not found")
+
+
+async def _require_property(pool, property_id: UUID) -> None:
+    """Raise 404 if the property does not exist."""
+    row = await pool.fetchrow(PROPERTY_EXISTS_SQL, property_id)
+    if row is None:
+        raise _not_found(property_id)
 
 
 def _float(val) -> Optional[float]:
@@ -101,6 +110,7 @@ async def get_property(property_id: UUID):
 @app.get("/api/v1/properties/{property_id}/events", response_model=EventsResponse)
 async def get_events(property_id: UUID):
     pool = app.state.pool
+    await _require_property(pool, property_id)
     rows = await pool.fetch(EVENTS_SQL, property_id)
     items = [
         EventItem(
@@ -128,6 +138,7 @@ async def get_events(property_id: UUID):
 @app.get("/api/v1/properties/{property_id}/analysis", response_model=AnalysisResponse)
 async def get_analysis(property_id: UUID):
     pool = app.state.pool
+    await _require_property(pool, property_id)
     rows = await pool.fetch(ANALYSIS_SQL, property_id)
     items = [
         AnalysisItem(
@@ -158,6 +169,7 @@ async def get_analysis(property_id: UUID):
 @app.get("/api/v1/properties/{property_id}/valuations", response_model=ValuationsResponse)
 async def get_valuations(property_id: UUID):
     pool = app.state.pool
+    await _require_property(pool, property_id)
     rows, equity_row = await _fetch_valuations(pool, property_id)
     items = [
         ValuationItem(
@@ -186,7 +198,6 @@ async def get_valuations(property_id: UUID):
 
 
 async def _fetch_valuations(pool, property_id):
-    import asyncio
     rows, equity_row = await asyncio.gather(
         pool.fetch(VALUATIONS_SQL, property_id),
         pool.fetchrow(EQUITY_SQL, property_id),

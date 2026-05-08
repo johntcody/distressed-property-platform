@@ -3,6 +3,8 @@
 All queries accept a single parameter: $1 = property_id (UUID).
 """
 
+PROPERTY_EXISTS_SQL = "SELECT 1 FROM properties WHERE id = $1"
+
 PROPERTY_DETAIL_SQL = """\
 SELECT
     p.id                AS property_id,

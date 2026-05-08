@@ -16,6 +16,7 @@ from services.property_detail.queries import (
     EQUITY_SQL,
     EVENTS_SQL,
     PROPERTY_DETAIL_SQL,
+    PROPERTY_EXISTS_SQL,
     VALUATIONS_SQL,
 )
 
@@ -127,6 +128,20 @@ class TestValuationsSQL:
     def test_only_one_param_placeholder(self):
         assert "$1" in VALUATIONS_SQL
         assert "$2" not in VALUATIONS_SQL
+
+
+# ── PROPERTY_EXISTS_SQL ───────────────────────────────────────────────────────
+
+class TestPropertyExistsSQL:
+    def test_selects_from_properties(self):
+        assert "properties" in PROPERTY_EXISTS_SQL
+
+    def test_filters_by_id(self):
+        assert "id = $1" in PROPERTY_EXISTS_SQL
+
+    def test_only_one_param_placeholder(self):
+        assert "$1" in PROPERTY_EXISTS_SQL
+        assert "$2" not in PROPERTY_EXISTS_SQL
 
 
 # ── EQUITY_SQL ────────────────────────────────────────────────────────────────
