@@ -83,7 +83,7 @@ These are not code tasks but must be resolved before the phases that depend on t
 | 3.1 — ARV calculator | **Complete** — `services/arv_engine/`; stub comp provider; inverse-distance-weighted price/sqft |
 | 3.2 — Rehab cost estimator | **Complete** — `services/rehab_engine/`; 3 templates (light/medium/heavy), per-item overrides |
 | 3.3 — MAO calculator | **Complete** — `services/mao_engine/`; formula MAO=(ARV×discount%)−rehab−holding−closing; ARV+rehab pulled from DB |
-| 4.1 — Opportunity Dashboard API | Not started |
+| 4.1 — Opportunity Dashboard API | **Complete** — `services/opportunity_dashboard/`; GET /api/v1/opportunities; 5 filters, 5 sort fields, pagination |
 | 4.2 — Property Detail API | Not started |
 | 4.3 — Alert engine | Not started |
 | 5.1 — Investor pipeline CRUD | Not started |
