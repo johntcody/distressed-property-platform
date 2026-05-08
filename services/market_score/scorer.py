@@ -14,19 +14,19 @@ Each sub-score is clamped to [0, 100] before averaging.
 
 Sub-score formulas
 ------------------
-appreciation_score = clamp((appreciation_rate / APPRECIATION_MAX) * 100, 0, 100)
-    APPRECIATION_MAX = 0.15  (15% YoY → perfect score)
+appreciation_score = clamp((appreciation_rate / _APPRECIATION_MAX) * 100, 0, 100)
+    _APPRECIATION_MAX = 0.15  (15% YoY → perfect score)
 
-liquidity_score = clamp((1 - dom / DOM_MAX) * 100, 0, 100)
-    DOM_MAX = 120  (≥120 days → score of 0; 0 days → 100)
+liquidity_score = clamp((1 - dom / _DOM_MAX) * 100, 0, 100)
+    _DOM_MAX = 120  (≥120 days → score of 0; 0 days → 100)
 
-yield_score = clamp((rent_to_price_ratio / YIELD_MAX) * 100, 0, 100)
-    YIELD_MAX = 0.10  (10% gross yield → perfect score)
+yield_score = clamp((rent_to_price_ratio / _YIELD_MAX) * 100, 0, 100)
+    _YIELD_MAX = 0.10  (10% gross yield → perfect score)
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 

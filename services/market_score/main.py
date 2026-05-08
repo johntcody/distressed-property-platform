@@ -160,7 +160,7 @@ async def get_latest_market_score(property_id: UUID):
             status_code=404, detail="Property exists but has not been market-scored yet"
         )
 
-    raw = json.loads(row["raw_data"]) if row["raw_data"] else {}
+    raw = row["raw_data"] or {}
 
     return MarketScoreResponse(
         property_id=property_id,
