@@ -107,8 +107,12 @@ class MarketScorer:
             liquidity_score=round(liquidity_score, 2),
             yield_score=round(yield_score, 2),
             inputs_used={
+                "zip_code": inputs.zip_code,
                 "appreciation_rate": inputs.appreciation_rate,
                 "avg_days_on_market": inputs.avg_days_on_market,
                 "rent_to_price_ratio": inputs.rent_to_price_ratio,
+                "appreciation_score": round(appreciation_score, 2),
+                "liquidity_score": round(liquidity_score, 2),
+                "yield_score": round(yield_score, 2),
             },
         )

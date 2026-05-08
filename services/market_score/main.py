@@ -164,11 +164,11 @@ async def get_latest_market_score(property_id: UUID):
 
     return MarketScoreResponse(
         property_id=property_id,
-        zip_code="",
+        zip_code=raw.get("zip_code", ""),
         market_score=float(row["market_score"]),
-        appreciation_score=0.0,
-        liquidity_score=0.0,
-        yield_score=0.0,
+        appreciation_score=raw.get("appreciation_score", 0.0),
+        liquidity_score=raw.get("liquidity_score", 0.0),
+        yield_score=raw.get("yield_score", 0.0),
         score_version=row["score_version"],
         calculated_at=row["calculated_at"],
     )

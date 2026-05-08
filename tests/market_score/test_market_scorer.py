@@ -137,6 +137,10 @@ class TestResultMetadata:
         assert result.inputs_used["appreciation_rate"] is None
         assert result.inputs_used["avg_days_on_market"] is None
         assert result.inputs_used["rent_to_price_ratio"] is None
+        assert result.inputs_used["zip_code"] == ""
+        assert result.inputs_used["appreciation_score"] == pytest.approx(50.0)
+        assert result.inputs_used["liquidity_score"] == pytest.approx(50.0)
+        assert result.inputs_used["yield_score"] == pytest.approx(50.0)
 
     def test_zip_code_passed_through(self):
         result = scorer.score(MarketInputs(zip_code="78701"))
