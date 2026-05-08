@@ -125,14 +125,16 @@ def build_query(
     direction = "DESC" if sort_dir == "desc" else "ASC"
     nulls = "NULLS LAST" if sort_dir == "desc" else "NULLS FIRST"
 
-    # Pagination params come after the filter params
+    # Pagination params come after the filter params.
+    # limit is at index len(filter_params)+1, offset at len(filter_params)+2.
+    n_filters = len(b.params)
     data_params = list(b.params) + [limit, offset]
-    limit_n  = len(data_params) - 1
-    offset_n = len(data_params)
+    limit_n  = n_filters + 1
+    offset_n = n_filters + 2
 
     data_sql = (
         f"{_BASE_QUERY}\n{where}\n"
-        f"ORDER BY {sort_col} {direction} {nulls}\n"
+        f"ORDER BY {sort_col} {direction} {nulls}, p.id ASC\n"
         f"LIMIT ${limit_n} OFFSET ${offset_n}"
     )
 

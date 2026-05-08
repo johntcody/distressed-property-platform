@@ -86,8 +86,8 @@ async def _cleanup(pool, *prop_ids):
         await pool.execute("DELETE FROM properties     WHERE id          = $1", pid)
 
 
-def _run(pool, **filters):
-    """Call build_query + execute synchronously inside an event loop (via pytest-asyncio)."""
+def _run(**filters):
+    """Build SQL + params via build_query; execute the returned SQL against the pool in the caller."""
     from services.opportunity_dashboard.query import build_query
     defaults = dict(
         county=None, case_type=None, min_distress_score=None,
@@ -105,7 +105,7 @@ def _run(pool, **filters):
 async def test_no_filters_returns_properties(pool):
     prop_id = await _insert_property(pool)
     try:
-        data_sql, data_params, count_sql, count_params = _run(pool)
+        data_sql, data_params, count_sql, count_params = _run()
         rows = await pool.fetch(data_sql, *data_params)
         ids = [r["property_id"] for r in rows]
         assert prop_id in ids
@@ -117,7 +117,7 @@ async def test_no_filters_returns_properties(pool):
 async def test_count_reflects_total(pool):
     prop_id = await _insert_property(pool)
     try:
-        _, _, count_sql, count_params = _run(pool)
+        _, _, count_sql, count_params = _run()
         row = await pool.fetchrow(count_sql, *count_params)
         assert row["total"] >= 1
     finally:
@@ -129,7 +129,7 @@ async def test_county_filter_matches(pool):
     p_travis = await _insert_property(pool, county="Travis")
     p_hays   = await _insert_property(pool, county="Hays")
     try:
-        data_sql, data_params, *_ = _run(pool, county="Travis")
+        data_sql, data_params, *_ = _run(county="Travis")
         rows = await pool.fetch(data_sql, *data_params)
         ids = [r["property_id"] for r in rows]
         assert p_travis in ids
@@ -142,7 +142,7 @@ async def test_county_filter_matches(pool):
 async def test_county_filter_excludes_non_match(pool):
     prop_id = await _insert_property(pool, county="Caldwell")
     try:
-        data_sql, data_params, *_ = _run(pool, county="Travis")
+        data_sql, data_params, *_ = _run(county="Travis")
         rows = await pool.fetch(data_sql, *data_params)
         ids = [r["property_id"] for r in rows]
         assert prop_id not in ids
@@ -157,7 +157,7 @@ async def test_min_distress_score_filter(pool):
     await _insert_score(pool, p_high, distress_score=80.0)
     await _insert_score(pool, p_low,  distress_score=30.0)
     try:
-        data_sql, data_params, *_ = _run(pool, min_distress_score=70.0)
+        data_sql, data_params, *_ = _run(min_distress_score=70.0)
         rows = await pool.fetch(data_sql, *data_params)
         ids = [r["property_id"] for r in rows]
         assert p_high in ids
@@ -173,7 +173,7 @@ async def test_min_equity_pct_filter(pool):
     await _insert_score(pool, p_rich, equity_pct=60.0)
     await _insert_score(pool, p_poor, equity_pct=10.0)
     try:
-        data_sql, data_params, *_ = _run(pool, min_equity_pct=50.0)
+        data_sql, data_params, *_ = _run(min_equity_pct=50.0)
         rows = await pool.fetch(data_sql, *data_params)
         ids = [r["property_id"] for r in rows]
         assert p_rich in ids
@@ -189,7 +189,7 @@ async def test_case_type_filter(pool):
     await _insert_event(pool, p_fc, event_type="foreclosure",    county="Travis")
     await _insert_event(pool, p_td, event_type="tax_delinquency", county="Travis")
     try:
-        data_sql, data_params, *_ = _run(pool, case_type="foreclosure")
+        data_sql, data_params, *_ = _run(case_type="foreclosure")
         rows = await pool.fetch(data_sql, *data_params)
         ids = [r["property_id"] for r in rows]
         assert p_fc in ids
@@ -205,7 +205,7 @@ async def test_auction_date_before_filter(pool):
     await _insert_event(pool, p_soon, auction_date=date(2025, 3, 1))
     await _insert_event(pool, p_late, auction_date=date(2025, 12, 1))
     try:
-        data_sql, data_params, *_ = _run(pool, auction_date_before=date(2025, 6, 1))
+        data_sql, data_params, *_ = _run(auction_date_before=date(2025, 6, 1))
         rows = await pool.fetch(data_sql, *data_params)
         ids = [r["property_id"] for r in rows]
         assert p_soon in ids
@@ -221,7 +221,7 @@ async def test_sort_distress_score_desc(pool):
     await _insert_score(pool, p1, distress_score=90.0, equity_pct=20.0)
     await _insert_score(pool, p2, distress_score=40.0, equity_pct=20.0)
     try:
-        data_sql, data_params, *_ = _run(pool, county="Travis",
+        data_sql, data_params, *_ = _run(county="Travis",
                                           sort_by="distress_score", sort_dir="desc")
         rows = await pool.fetch(data_sql, *data_params)
         ids = [r["property_id"] for r in rows]
@@ -247,11 +247,11 @@ async def test_pagination_page_size_respected(pool):
 async def test_pagination_total_vs_page(pool):
     props = [await _insert_property(pool, county="Bastrop") for _ in range(3)]
     try:
-        _, _, count_sql, count_params = _run(pool, county="Bastrop")
+        _, _, count_sql, count_params = _run(county="Bastrop")
         count_row = await pool.fetchrow(count_sql, *count_params)
         assert count_row["total"] >= 3
 
-        data_sql, data_params, *_ = _run(pool, county="Bastrop", limit=2, offset=0)
+        data_sql, data_params, *_ = _run(county="Bastrop", limit=2, offset=0)
         page1 = await pool.fetch(data_sql, *data_params)
         assert len(page1) == 2
     finally:

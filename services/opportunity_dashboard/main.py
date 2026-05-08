@@ -8,7 +8,6 @@ from datetime import date
 from typing import Optional
 
 import asyncio
-
 import asyncpg
 from fastapi import FastAPI, Query
 
