@@ -61,7 +61,7 @@ async def build_digest_rows(pool) -> list[DigestEntry]:
                 lines=[],
             )
         entry = by_user[uid]
-        score_str = f"  score {row['trigger_score']:.0f}" if row["trigger_score"] else ""
+        score_str = f"  score {row['trigger_score']:.0f}" if row["trigger_score"] is not None else ""
         entry.lines.append(
             f"• {row['trigger_type'].replace('_', ' ').title()}"
             f" — property {row['property_id']}{score_str}"

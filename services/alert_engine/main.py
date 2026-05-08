@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import sys
 from contextlib import asynccontextmanager
@@ -17,6 +18,8 @@ from typing import Optional
 
 import asyncpg
 from fastapi import FastAPI
+
+logger = logging.getLogger(__name__)
 
 from .consumer import run_consumer
 from .digest import build_digest_rows, format_digest
@@ -44,19 +47,20 @@ async def health():
     return {"status": "ok", "service": "alert-engine"}
 
 
-@app.post("/digest", summary="Send daily digest to all users with alerts in last 24 h")
+@app.post("/api/v1/digest", summary="Send daily digest to all users with alerts in last 24 h")
 async def send_digest():
     pool = app.state.pool
     entries = await build_digest_rows(pool)
-    sent = 0
+    sent = failed = 0
     for entry in entries:
         subject, body = format_digest(entry)
         try:
             dispatch(entry.channel, entry.contact, subject, body)
             sent += 1
         except Exception:
-            pass
-    return {"digests_sent": sent}
+            logger.exception("Failed to send digest to %s via %s", entry.contact, entry.channel)
+            failed += 1
+    return {"digests_sent": sent, "digests_failed": failed}
 
 
 # ── CLI consumer entry point ──────────────────────────────────────────────────

@@ -31,7 +31,8 @@ async def load_active_subscriptions(pool) -> list[Subscription]:
             channel=row["channel"],
             contact=row["contact"],
             county=row["county"],
-            event_types=list(row["event_types"]) if row["event_types"] else None,
+            # NULL → None (match all types); [] → [] (match nothing); preserve distinction
+            event_types=list(row["event_types"]) if row["event_types"] is not None else None,
             min_distress_score=float(row["min_distress_score"])
                 if row["min_distress_score"] is not None else None,
             min_equity_pct=float(row["min_equity_pct"])

@@ -25,11 +25,12 @@ def match_subscriptions(
 
 
 def _matches(event: EventMessage, sub: Subscription) -> bool:
-    # county filter: NULL subscription county means "all counties"
-    if sub.county is not None and sub.county != event.county:
+    # county filter: None means "all counties"; normalize both sides to avoid
+    # missed alerts when a subscription stores "Travis" but events carry "travis"
+    if sub.county is not None and sub.county.lower() != event.county.lower():
         return False
 
-    # event_type filter: NULL subscription list means "all types"
+    # event_type filter: None means "all types"; [] means "no types" (never matches)
     if sub.event_types is not None and event.event_type not in sub.event_types:
         return False
 

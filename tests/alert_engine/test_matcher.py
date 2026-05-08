@@ -82,8 +82,13 @@ class TestCountyFilter:
         sub = _sub(county=None)
         assert match_subscriptions(_event(county="williamson"), [sub]) == [sub]
 
-    def test_county_is_case_sensitive(self):
+    def test_county_is_case_insensitive(self):
+        # Subscription may store "Travis" while events always carry "travis"
         sub = _sub(county="Travis")
+        assert match_subscriptions(_event(county="travis"), [sub]) == [sub]
+
+    def test_county_mismatch_different_name(self):
+        sub = _sub(county="hays")
         assert match_subscriptions(_event(county="travis"), [sub]) == []
 
 
@@ -105,6 +110,11 @@ class TestEventTypeFilter:
     def test_single_type_list(self):
         sub = _sub(event_types=["tax_delinquency"])
         assert match_subscriptions(_event(event_type="tax_delinquency"), [sub]) == [sub]
+
+    def test_empty_list_never_matches(self):
+        # [] is distinct from None: [] means "no types selected" → never fires
+        sub = _sub(event_types=[])
+        assert match_subscriptions(_event(event_type="foreclosure"), [sub]) == []
 
 
 # ── distress score filter ─────────────────────────────────────────────────────

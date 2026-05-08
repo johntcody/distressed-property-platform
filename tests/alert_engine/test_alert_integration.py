@@ -110,7 +110,9 @@ async def _insert_alert(pool, pid, sid, eid, trigger_type="foreclosure",
 
 
 async def _cleanup_user(pool, uid):
-    # cascade: subscriptions → alerts deleted by FK; clean properties separately
+    # Deleting the user cascades to alert_subscriptions (ON DELETE CASCADE).
+    # alerts.subscription_id is ON DELETE SET NULL, so alert rows survive with
+    # subscription_id = NULL — they are cleaned up by _cleanup_property().
     await pool.execute("DELETE FROM users WHERE id = $1", uid)
 
 

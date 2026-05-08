@@ -19,6 +19,7 @@ Message schema (JSON):
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -84,8 +85,11 @@ async def process_event(
             )
             continue
 
-    # Delete from queue only after all processing succeeds
-    sqs_client.delete_message(QueueUrl=_QUEUE_URL, ReceiptHandle=receipt_handle)
+    # Delete from queue only after all processing succeeds.
+    # boto3 is synchronous — run in a thread to avoid blocking the event loop.
+    await asyncio.to_thread(
+        sqs_client.delete_message, QueueUrl=_QUEUE_URL, ReceiptHandle=receipt_handle
+    )
     logger.info(
         "Processed event %s (%s) → %d notification(s)",
         event.event_id, event.event_type, len(matched),
@@ -102,7 +106,9 @@ async def run_consumer(pool) -> None:
     logger.info("Alert consumer started. Queue: %s", _QUEUE_URL)
 
     while True:
-        response = sqs.receive_message(
+        # receive_message is synchronous; run in a thread to avoid blocking the event loop
+        response = await asyncio.to_thread(
+            sqs.receive_message,
             QueueUrl=_QUEUE_URL,
             MaxNumberOfMessages=_MAX_MESSAGES,
             WaitTimeSeconds=_WAIT_SECONDS,
@@ -119,6 +125,8 @@ async def run_consumer(pool) -> None:
             event = _parse_message(msg["Body"])
             if event is None:
                 # Poison-pill: delete so it doesn't block the queue
-                sqs.delete_message(QueueUrl=_QUEUE_URL, ReceiptHandle=msg["ReceiptHandle"])
+                await asyncio.to_thread(
+                    sqs.delete_message, QueueUrl=_QUEUE_URL, ReceiptHandle=msg["ReceiptHandle"]
+                )
                 continue
             await process_event(pool, sqs, event, msg["ReceiptHandle"], subscriptions)
