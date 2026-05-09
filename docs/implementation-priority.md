@@ -116,7 +116,7 @@ These are not code tasks but must be resolved before the phases that depend on t
 | 5.2 — Frontend (Next.js) | Not started |
 | 6.1 — JWT auth on all endpoints | Not started |
 | 6.2 — Secrets Manager + IAM roles per service | Not started |
-| 6.3 — Least-privilege DB users | Not started |
+| 6.3 — Least-privilege DB users | In Progress — `db/migrations/014`; apply to DB + update service creds |
 | 6.4 — WAF + rate limiting | Not started |
 | 6.5 — VPC + security groups | Not started |
 | 6.6 — Audit logging | Not started |
@@ -126,3 +126,35 @@ These are not code tasks but must be resolved before the phases that depend on t
 | 7.4 — Custom business metrics in scrapers | Not started |
 | 7.5 — Structured JSON logging (structlog) | Not started |
 | 7.6 — Synthetic canary Lambda | Not started |
+
+
+# Revised Priority Order
+Phase 0  — Foundation
+  + 6.3  Least-privilege DB users
+
+Phase 1  — Data Ingestion
+  + 6.2  Secrets Manager (before any Lambda is deployed)
+  + 7.4  Scraper business metrics (events inserted per county)
+  + 7.5  Structured logging (add structlog as each service is written)
+
+Phase 2  — Scoring Engines
+  (7.5 already in place from Phase 1)
+
+Phase 3  — Deal Analysis
+  (no change)
+
+Phase 4  — APIs + Alerts
+  + 6.1  JWT auth (build into API foundation before endpoints multiply)
+  + 7.3  SQS DLQ alarm (when queue is created in 4.3)
+
+Phase 5  — Investor Workflow + Frontend
+
+Phase 6  — Security Hardening (remaining)
+  6.4  WAF + rate limiting
+  6.5  VPC + security groups
+  6.6  Audit logging
+
+Phase 7  — Monitoring (remaining)
+  7.1  Container Insights
+  7.2  RDS Performance Insights
+  7.6  Synthetic canary

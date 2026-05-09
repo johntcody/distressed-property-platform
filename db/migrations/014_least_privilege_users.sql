@@ -32,13 +32,12 @@ $$;
 
 -- Owns the schema; can CREATE, ALTER, DROP, run migrations.
 -- Grant the current owner role so migrations_user can alter objects it doesn't own.
-GRANT ALL PRIVILEGES ON DATABASE current_database() TO migrations_user;
+GRANT ALL PRIVILEGES ON DATABASE distressed_property_db TO migrations_user;
 GRANT ALL ON SCHEMA public TO migrations_user;
 
 -- ── app_user — DML only ───────────────────────────────────────────────────────
 
 -- No CREATE TABLE, no DROP, no TRUNCATE.
-REVOKE ALL ON SCHEMA public FROM app_user;
 GRANT USAGE ON SCHEMA public TO app_user;
 
 -- Existing tables
@@ -66,6 +65,9 @@ ALTER DEFAULT PRIVILEGES FOR ROLE migrations_user IN SCHEMA public
 
 ALTER DEFAULT PRIVILEGES FOR ROLE migrations_user IN SCHEMA public
     GRANT USAGE ON SEQUENCES TO app_user;
+
+ALTER DEFAULT PRIVILEGES FOR ROLE migrations_user IN SCHEMA public
+    GRANT EXECUTE ON FUNCTIONS TO app_user;
 
 -- ── Explicit denials (belt-and-suspenders) ────────────────────────────────────
 
