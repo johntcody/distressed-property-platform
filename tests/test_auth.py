@@ -143,9 +143,12 @@ class TestMissingToken:
         resp = client.get("/api/v1/resource")
         assert resp.json()["detail"]["error"] == "missing_token"
 
-    def test_wrong_scheme_returns_401(self, client):
+    def test_non_bearer_scheme_treated_as_missing_token(self, client):
+        # HTTPBearer with auto_error=False returns None for non-Bearer schemes,
+        # so the error code is missing_token, not an invalid-scheme error.
         resp = client.get("/api/v1/resource", headers={"Authorization": "Basic dXNlcjpwYXNz"})
         assert resp.status_code == 401
+        assert resp.json()["detail"]["error"] == "missing_token"
 
 
 # ── Expired token ─────────────────────────────────────────────────────────────
@@ -196,3 +199,45 @@ class TestTamperedToken:
         resp = client.get("/api/v1/resource")
         assert "www-authenticate" in resp.headers
         assert resp.headers["www-authenticate"] == "Bearer"
+
+
+# ── JWKS fetch failure ────────────────────────────────────────────────────────
+
+class TestJwksFetchFailure:
+    def test_jwks_unreachable_returns_503(self, monkeypatch):
+        """If _get_jwks raises RuntimeError (IDP unreachable), require_auth must return 503."""
+        monkeypatch.setenv("JWKS_URI", "https://fake-idp.example.com/.well-known/jwks.json")
+        monkeypatch.delenv("JWKS_AUDIENCE", raising=False)
+        monkeypatch.delenv("JWKS_ISSUER", raising=False)
+
+        import api.deps as deps
+        deps._get_jwks.cache_clear()
+
+        from unittest.mock import patch
+        from fastapi import Depends
+        from fastapi.testclient import TestClient
+        from api.deps import TokenPayload, require_auth
+
+        app_503 = __import__("fastapi").FastAPI()
+
+        @app_503.get("/api/v1/resource")
+        def protected(token: TokenPayload = Depends(require_auth)):
+            return {"user_id": token.sub}
+
+        import jose.jwt as _jwt
+        import time as _time
+        dummy_token = _jwt.encode(
+            {"sub": "x", "exp": int(_time.time()) + 900},
+            "ignored",
+            algorithm="HS256",
+        )
+
+        with patch.object(deps, "_get_jwks", side_effect=RuntimeError("IDP unreachable")):
+            client_503 = TestClient(app_503, raise_server_exceptions=False)
+            resp = client_503.get(
+                "/api/v1/resource",
+                headers={"Authorization": f"Bearer {dummy_token}"},
+            )
+
+        assert resp.status_code == 503
+        assert resp.json()["detail"]["error"] == "jwks_unavailable"

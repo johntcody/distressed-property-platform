@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 from services.config import get_db_url
-from api.deps import TokenPayload, require_auth
+from api.deps import require_auth
 
 import asyncio
 import logging

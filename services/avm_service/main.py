@@ -12,7 +12,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Depends
 
 from services.config import get_db_url
-from api.deps import TokenPayload, require_auth
+from api.deps import require_auth
 from .client import get_avm
 from .models import AvmRequest, AvmResponse
 

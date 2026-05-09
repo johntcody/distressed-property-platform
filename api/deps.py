@@ -20,7 +20,6 @@ Row-level scoping:
 from __future__ import annotations
 
 import os
-import time
 from functools import lru_cache
 from typing import Optional
 
@@ -61,7 +60,7 @@ def _get_jwks() -> dict:
     """Fetch JWKS from the identity provider and cache for the process lifetime.
 
     Called once at first authenticated request. If the IDP rotates signing keys,
-    redeploy the service to pick up the new JWKS.
+    the new JWKS takes effect on the next ECS task restart or Lambda cold start.
     """
     uri = _jwks_uri()
     try:
@@ -128,11 +127,16 @@ def _verify_token(token: str) -> TokenPayload:
 def require_auth(
     request: "Request",
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
-) -> Optional[TokenPayload]:
+) -> TokenPayload | None:
     """FastAPI dependency that enforces JWT authentication on a route.
 
     Applied as a global app dependency — automatically exempts /health so
     load balancer health checks work without credentials.
+
+    Returns None on /health (routes must accept Optional[TokenPayload] or use
+    require_auth only on protected routes). Returns TokenPayload on success.
+    Raises HTTP 401 on missing, expired, or tampered tokens on all other paths.
+    Raises HTTP 503 if the JWKS endpoint is unreachable at startup.
 
     Usage:
         from api.deps import require_auth, TokenPayload
@@ -140,9 +144,6 @@ def require_auth(
         @app.get("/api/v1/resource")
         async def my_route(token: TokenPayload = Depends(require_auth)):
             user_id = token.sub  # use for WHERE user_id = $1
-
-    Returns the decoded TokenPayload on success, None on /health.
-    Raises HTTP 401 on missing, expired, or tampered tokens on all other paths.
     """
     if request.url.path == "/health":
         return None
@@ -153,4 +154,11 @@ def require_auth(
             detail={"error": "missing_token", "message": "Authorization: Bearer <token> header required"},
             headers={"WWW-Authenticate": "Bearer"},
         )
-    return _verify_token(credentials.credentials)
+
+    try:
+        return _verify_token(credentials.credentials)
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"error": "jwks_unavailable", "message": str(exc)},
+        ) from exc
