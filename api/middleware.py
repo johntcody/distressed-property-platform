@@ -45,6 +45,9 @@ def _rate_limit_key(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
+# headers_enabled is not set: slowapi 0.1.9 with SlowAPIMiddleware does not
+# support injecting X-RateLimit-* response headers without causing a
+# Starlette response-object conflict. 429 enforcement is fully functional.
 limiter = Limiter(key_func=_rate_limit_key, default_limits=["60/minute"])
 
 
