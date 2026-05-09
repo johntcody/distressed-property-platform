@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from services.config import get_db_url
+from api.deps import TokenPayload, require_auth
 
 import os
 from contextlib import asynccontextmanager
@@ -11,7 +12,7 @@ from typing import Optional
 
 import asyncio
 import asyncpg
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, Depends
 
 from .models import CaseType, OpportunitiesResponse, OpportunityItem, SortDir, SortField
 from .query import build_query
@@ -30,7 +31,7 @@ async def lifespan(app: FastAPI):
     _pool = None
 
 
-app = FastAPI(title="Opportunity Dashboard API", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Opportunity Dashboard API", version="1.0.0", lifespan=lifespan, dependencies=[Depends(require_auth)])
 
 
 @app.get("/health")

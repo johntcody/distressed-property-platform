@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 from services.config import get_db_url
+from api.deps import TokenPayload, require_auth
 
 import asyncio
 import logging
@@ -19,7 +20,7 @@ from contextlib import asynccontextmanager
 from typing import Optional
 
 import asyncpg
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,7 @@ async def lifespan(app: FastAPI):
     _pool = None
 
 
-app = FastAPI(title="Alert Engine", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Alert Engine", version="1.0.0", lifespan=lifespan, dependencies=[Depends(require_auth)])
 
 
 @app.get("/health")

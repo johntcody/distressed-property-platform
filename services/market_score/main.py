@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from services.config import get_db_url
+from api.deps import TokenPayload, require_auth
 
 import json
 import os
@@ -12,7 +13,7 @@ from typing import Optional
 from uuid import UUID
 
 import asyncpg
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Depends
 
 from .models import (
     MarketScoreHistoryItem,
@@ -37,7 +38,7 @@ async def lifespan(app: FastAPI):
     _pool = None
 
 
-app = FastAPI(title="Market Score Service", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Market Score Service", version="1.0.0", lifespan=lifespan, dependencies=[Depends(require_auth)])
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
