@@ -9,6 +9,8 @@
 
 from __future__ import annotations
 
+from services.config import get_db_url
+
 import asyncio
 import logging
 import os
@@ -31,7 +33,7 @@ _pool: Optional[asyncpg.Pool] = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _pool
-    dsn = os.environ.get("DATABASE_URL")
+    dsn = get_db_url()
     _pool = await asyncpg.create_pool(dsn=dsn, min_size=2, max_size=10, command_timeout=30)
     app.state.pool = _pool
     yield
@@ -66,7 +68,7 @@ async def send_digest():
 # ── CLI consumer entry point ──────────────────────────────────────────────────
 
 async def _run_consumer_standalone():
-    dsn = os.environ.get("DATABASE_URL")
+    dsn = get_db_url()
     pool = await asyncpg.create_pool(dsn=dsn, min_size=2, max_size=10, command_timeout=30)
     try:
         await run_consumer(pool)

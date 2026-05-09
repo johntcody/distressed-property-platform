@@ -1,0 +1,48 @@
+{
+  "_comment": "IAM role for the alert_engine ECS task only. Adds SQS queue URL access on top of the base API role. Scoped separately so the SQS secret is not readable by other FastAPI services.",
+  "_comment_arns": "Resource ARNs use wildcard account ID (*) for portability. Replace * with the literal AWS account ID before deploying to production.",
+  "RoleName": "dpip-alert-engine",
+  "AssumeRolePolicyDocument": {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Effect": "Allow",
+        "Principal": { "Service": "ecs-tasks.amazonaws.com" },
+        "Action": "sts:AssumeRole"
+      }
+    ]
+  },
+  "InlinePolicy": {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Sid": "SecretsManagerRuntimeSecrets",
+        "Effect": "Allow",
+        "Action": "secretsmanager:GetSecretValue",
+        "Resource": [
+          "arn:aws:secretsmanager:us-east-1:*:secret:dpip/db/app_user-*",
+          "arn:aws:secretsmanager:us-east-1:*:secret:dpip/sqs/alert_queue_url-*"
+        ]
+      },
+      {
+        "Sid": "SQSConsume",
+        "Effect": "Allow",
+        "Action": [
+          "sqs:ReceiveMessage",
+          "sqs:DeleteMessage",
+          "sqs:GetQueueAttributes"
+        ],
+        "Resource": "arn:aws:sqs:us-east-1:*:dpip-alerts"
+      },
+      {
+        "Sid": "CloudWatchLogs",
+        "Effect": "Allow",
+        "Action": [
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ],
+        "Resource": "arn:aws:logs:us-east-1:*:log-group:/dpip/*:*"
+      }
+    ]
+  }
+}
