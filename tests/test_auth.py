@@ -86,7 +86,9 @@ def auth_app(jwks, monkeypatch):
         from fastapi import Depends
         from api.deps import TokenPayload, require_auth
 
-        app = FastAPI()
+        # Mirror real service wiring: global dependency so /health bypass logic
+        # inside require_auth is exercised on every request, including health checks.
+        app = FastAPI(dependencies=[Depends(require_auth)])
 
         @app.get("/health")
         def health():

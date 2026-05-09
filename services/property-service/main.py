@@ -1,12 +1,13 @@
-from services.config import get_db_url
 """Property Service — CRUD and lookup for distressed property records."""
 
 import os
 from contextlib import asynccontextmanager
 
 import asyncpg
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 
+from api.deps import require_auth
+from services.config import get_db_url
 from .routes import router
 
 _pool: asyncpg.Pool | None = None
@@ -31,7 +32,12 @@ async def lifespan(app: FastAPI):
     _pool = None
 
 
-app = FastAPI(title="Property Service", version="0.1.0", lifespan=lifespan)
+app = FastAPI(
+    title="Property Service",
+    version="0.1.0",
+    lifespan=lifespan,
+    dependencies=[Depends(require_auth)],
+)
 app.include_router(router, prefix="/api/v1")
 
 

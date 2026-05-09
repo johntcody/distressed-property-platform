@@ -1,14 +1,15 @@
 """
 Shared FastAPI dependencies for JWT authentication.
 
-All services import require_auth from this module and declare it as a
-Depends() on every route except /health.
+All services import require_auth from this module and pass it as a global
+app dependency: FastAPI(dependencies=[Depends(require_auth)]).
 
 Token requirements:
   - Algorithm: RS256 only (HS256 with a shared secret is rejected)
   - Issuer: configured via JWKS_ISSUER env var (Cognito or Auth0 URL)
-  - Public key: fetched from the identity provider's JWKS endpoint at
-    startup and cached for the lifetime of the process
+  - Public key: fetched lazily from the identity provider's JWKS endpoint
+    on the first authenticated request and cached for the process lifetime.
+    Key rotation takes effect on the next ECS task restart or Lambda cold start.
   - Access tokens expire in 15 minutes; this module enforces expiry
 
 Row-level scoping:
@@ -19,6 +20,7 @@ Row-level scoping:
 
 from __future__ import annotations
 
+import logging
 import os
 from functools import lru_cache
 from typing import Optional
@@ -29,6 +31,8 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import ExpiredSignatureError, JWTError, jwt
 from jose.exceptions import JWTClaimsError
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 _bearer = HTTPBearer(auto_error=False)
 
@@ -82,9 +86,12 @@ class TokenPayload(BaseModel):
 
 # ── Core verification ──────────────────────────────────────────────────────────
 
-def _verify_token(token: str) -> TokenPayload:
+def _verify_token(token: str, request: Optional["Request"] = None) -> TokenPayload:
     """Decode and verify an RS256 JWT. Raises HTTPException on any failure."""
     jwks = _get_jwks()
+
+    client_ip = request.client.host if request and request.client else "unknown"
+    path = request.url.path if request else "unknown"
 
     try:
         payload = jwt.decode(
@@ -96,29 +103,42 @@ def _verify_token(token: str) -> TokenPayload:
             options={"verify_aud": _jwt_audience() is not None},
         )
     except ExpiredSignatureError:
+        logger.warning("auth_failure error=token_expired path=%s client_ip=%s", path, client_ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"error": "token_expired", "message": "Access token has expired"},
             headers={"WWW-Authenticate": "Bearer"},
         )
     except JWTClaimsError as exc:
+        logger.warning("auth_failure error=invalid_claims path=%s client_ip=%s detail=%s", path, client_ip, exc)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"error": "invalid_claims", "message": str(exc)},
             headers={"WWW-Authenticate": "Bearer"},
         )
     except JWTError:
+        logger.warning("auth_failure error=invalid_token path=%s client_ip=%s", path, client_ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"error": "invalid_token", "message": "Token signature verification failed"},
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    sub = payload.get("sub") or ""
+    exp = payload.get("exp") or 0
+    if not sub or not exp:
+        logger.warning("auth_failure error=invalid_claims path=%s client_ip=%s detail=missing sub or exp", path, client_ip)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"error": "invalid_claims", "message": "Token is missing required claims (sub, exp)"},
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     return TokenPayload(
-        sub=payload.get("sub", ""),
+        sub=sub,
         email=payload.get("email"),
         roles=payload.get("cognito:groups", payload.get("roles", [])),
-        exp=payload.get("exp", 0),
+        exp=exp,
     )
 
 
@@ -149,6 +169,8 @@ def require_auth(
         return None
 
     if credentials is None:
+        client_ip = request.client.host if request.client else "unknown"
+        logger.warning("auth_failure error=missing_token path=%s client_ip=%s", request.url.path, client_ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"error": "missing_token", "message": "Authorization: Bearer <token> header required"},
@@ -156,7 +178,7 @@ def require_auth(
         )
 
     try:
-        return _verify_token(credentials.credentials)
+        return _verify_token(credentials.credentials, request)
     except RuntimeError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
