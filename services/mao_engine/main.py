@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from services.config import get_db_url
+from api.deps import require_auth
 
 import asyncio
 import os
@@ -12,7 +13,7 @@ from typing import Optional
 from uuid import UUID
 
 import asyncpg
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Depends
 
 from .calculator import MAOCalculator, MAOInputs, MAOResult
 from .models import MAOHistoryItem, MAOHistoryResponse, MAORequest, MAOResponse
@@ -32,7 +33,7 @@ async def lifespan(app: FastAPI):
     _pool = None
 
 
-app = FastAPI(title="MAO Engine", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="MAO Engine", version="1.0.0", lifespan=lifespan, dependencies=[Depends(require_auth)])
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────

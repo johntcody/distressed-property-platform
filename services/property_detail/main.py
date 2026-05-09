@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from services.config import get_db_url
+from api.deps import require_auth
 
 import asyncio
 import os
@@ -11,7 +12,7 @@ from typing import Optional
 from uuid import UUID
 
 import asyncpg
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 
 from .models import (
     AnalysisItem,
@@ -45,7 +46,7 @@ async def lifespan(app: FastAPI):
     _pool = None
 
 
-app = FastAPI(title="Property Detail API", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Property Detail API", version="1.0.0", lifespan=lifespan, dependencies=[Depends(require_auth)])
 
 
 @app.get("/health")

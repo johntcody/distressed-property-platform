@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from services.config import get_db_url
+from api.deps import require_auth
 
 import os
 from contextlib import asynccontextmanager
@@ -11,7 +12,7 @@ from typing import Optional
 from uuid import UUID
 
 import asyncpg
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Depends
 
 from .calculator import EquityCalculator, EquityInputs
 from .models import (
@@ -39,7 +40,7 @@ async def lifespan(app: FastAPI):
     _pool = None
 
 
-app = FastAPI(title="Equity Engine", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Equity Engine", version="1.0.0", lifespan=lifespan, dependencies=[Depends(require_auth)])
 
 
 # ── helpers ────────────────────────────────────────────────────────────────────
