@@ -115,7 +115,7 @@ These are not code tasks but must be resolved before the phases that depend on t
 | 5.1 — Investor pipeline CRUD | Not started |
 | 5.2 — Frontend (Next.js) | Not started |
 | 6.1 — JWT auth on all endpoints | Not started |
-| 6.2 — Secrets Manager + IAM roles per service | In Progress — `services/config.py`; `infra/iam/`; update service creds + enable rotation |
+| 6.2 — Secrets Manager + IAM roles per service | **Complete** — `services/config.py`; `infra/iam/`; all 11 services switched to `get_db_url()`; trufflehog CI scan added |
 | 6.3 — Least-privilege DB users | **Complete** — `db/migrations/014_least_privilege_users.sql`; verified on Neon dev DB |
 | 6.4 — WAF + rate limiting | Not started |
 | 6.5 — VPC + security groups | Not started |

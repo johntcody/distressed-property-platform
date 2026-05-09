@@ -1,3 +1,4 @@
+from services.config import get_db_url
 """Property Service — CRUD and lookup for distressed property records."""
 
 import os
@@ -20,7 +21,7 @@ def get_pool() -> asyncpg.Pool:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _pool
-    dsn = os.environ.get("DATABASE_URL")
+    dsn = get_db_url()
     if not dsn:
         raise RuntimeError("DATABASE_URL is not set")
     _pool = await asyncpg.create_pool(dsn=dsn, min_size=2, max_size=10, command_timeout=30)
