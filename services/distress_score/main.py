@@ -34,8 +34,8 @@ async def lifespan(app: FastAPI):
     _pool = None
 
 
-app = FastAPI(title="Distress Score Service", version="1.0.0", lifespan=lifespan, dependencies=[Depends(require_auth)
-add_rate_limiting(app)])
+app = FastAPI(title="Distress Score Service", version="1.0.0", lifespan=lifespan, dependencies=[Depends(require_auth)])
+add_rate_limiting(app)
 
 
 # ── helpers ────────────────────────────────────────────────────────────────────

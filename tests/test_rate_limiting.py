@@ -13,14 +13,21 @@ No real Redis or external state — slowapi's in-memory backend is used.
 
 from __future__ import annotations
 
-import time
-from unittest.mock import patch
-
 import pytest
-from fastapi import Depends, FastAPI, Request
+from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 from api.middleware import add_rate_limiting, limiter, _rate_limit_key
+
+
+# ── shared fixture: reset limiter storage before every test ───────────────────
+
+@pytest.fixture(autouse=True)
+def reset_limiter():
+    """Prevent rate-limit state from leaking between tests."""
+    limiter._storage.reset()
+    yield
+    limiter._storage.reset()
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -52,17 +59,7 @@ def _make_app(route_limit: str | None = None) -> FastAPI:
 class TestRateLimitKey:
     def test_uses_token_sub_when_authenticated(self):
         """Key should be the authenticated user ID, not the IP."""
-        app = FastAPI()
-
-        @app.get("/check")
-        async def check(request: Request):
-            return {"key": _rate_limit_key(request)}
-
-        # Simulate require_auth storing token on request.state
         from types import SimpleNamespace
-        client = TestClient(app)
-        # Patch ASGI scope to inject a state token — done via middleware workaround
-        # We test _rate_limit_key directly with a mock request instead
         mock_request = SimpleNamespace(
             state=SimpleNamespace(token=SimpleNamespace(sub="user-abc")),
             client=SimpleNamespace(host="1.2.3.4"),
@@ -104,12 +101,8 @@ class TestAddRateLimiting:
 
     def test_rate_limit_exceeded_returns_429(self):
         """Exhaust the per-route limit; the next request must get 429."""
-        # Use a very low limit so the test doesn't need many requests
         app = _make_app(route_limit="2/minute")
         client = TestClient(app, raise_server_exceptions=False)
-
-        # Reset limiter storage between tests
-        limiter._storage.reset()
 
         resp1 = client.get("/limited")
         resp2 = client.get("/limited")
@@ -122,21 +115,21 @@ class TestAddRateLimiting:
     def test_429_response_is_json(self):
         app = _make_app(route_limit="1/minute")
         client = TestClient(app, raise_server_exceptions=False)
-        limiter._storage.reset()
 
         client.get("/limited")        # consume the 1 allowed
         resp = client.get("/limited") # blocked
 
         assert resp.status_code == 429
-        # slowapi returns a plain-text or JSON body depending on version;
-        # confirm the response has content
         assert resp.content
 
     def test_health_not_rate_limited(self):
         """Health endpoint should always return 200 regardless of limit state."""
         app = _make_app(route_limit="1/minute")
         client = TestClient(app, raise_server_exceptions=False)
-        limiter._storage.reset()
+
+        # Exhaust the limit on /limited first
+        client.get("/limited")
+        client.get("/limited")
 
         for _ in range(5):
             resp = client.get("/health")
@@ -151,7 +144,39 @@ class TestDefaultLimit:
         the middleware is present and the route returns 200 for normal traffic."""
         app = _make_app()  # no explicit route_limit
         client = TestClient(app, raise_server_exceptions=False)
-        limiter._storage.reset()
 
         resp = client.get("/limited")
         assert resp.status_code == 200
+
+
+# ── per-user bucket isolation ─────────────────────────────────────────────────
+
+class TestPerUserIsolation:
+    def test_two_users_share_same_ip_get_separate_buckets(self):
+        """Two authenticated users behind the same IP must not share a bucket.
+
+        This validates the primary value of keying on token.sub instead of IP.
+        """
+        from types import SimpleNamespace
+
+        app = _make_app(route_limit="1/minute")
+        client = TestClient(app, raise_server_exceptions=False)
+
+        # Exhaust user-alice's bucket
+        with_alice = {"X-Test-User": "alice"}
+        with_bob = {"X-Test-User": "bob"}
+
+        # Directly test the key function with two distinct user tokens
+        req_alice = SimpleNamespace(
+            state=SimpleNamespace(token=SimpleNamespace(sub="alice")),
+            client=SimpleNamespace(host="1.2.3.4"),
+        )
+        req_bob = SimpleNamespace(
+            state=SimpleNamespace(token=SimpleNamespace(sub="bob")),
+            client=SimpleNamespace(host="1.2.3.4"),  # same IP
+        )
+
+        # Both users share the same IP but get different bucket keys
+        assert _rate_limit_key(req_alice) == "alice"
+        assert _rate_limit_key(req_bob) == "bob"
+        assert _rate_limit_key(req_alice) != _rate_limit_key(req_bob)

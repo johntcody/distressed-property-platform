@@ -5,7 +5,7 @@ Description: >
     - OWASP CRS managed rules (common attacks + SQLi)
     - Per-IP rate limit: 100 req / 5 min → HTTP 429
     - Geo-block: non-US traffic
-    - WAF logging to CloudWatch /aws/waf/dpip
+    - WAF logging to CloudWatch aws-waf-logs-dpip
 
 Parameters:
   Environment:
@@ -19,7 +19,7 @@ Resources:
   WafLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: /aws/waf/dpip
+      LogGroupName: aws-waf-logs-dpip
       RetentionInDays: 90
 
   # ── WebACL ────────────────────────────────────────────────────────────────────
@@ -108,7 +108,7 @@ Resources:
     Properties:
       ResourceArn: !GetAtt DPIPWebACL.Arn
       LogDestinationConfigs:
-        - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/waf/dpip
+        - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:aws-waf-logs-dpip
       LoggingFilter:
         DefaultBehavior: DROP
         Filters:
@@ -177,4 +177,4 @@ Outputs:
 
   WafLogGroupName:
     Description: CloudWatch log group receiving WAF block logs
-    Value: /aws/waf/dpip
+    Value: aws-waf-logs-dpip

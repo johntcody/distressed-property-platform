@@ -123,7 +123,7 @@ These are not code tasks but must be resolved before the phases that depend on t
 | 7.1 — CloudWatch Container Insights | Not started |
 | 7.2 — RDS Performance Insights + slow query log | Not started |
 | 7.3 — SQS DLQ alarm | Not started |
-| 7.4 — Cus tom business metrics in scrapers | Not started |
+| 7.4 — Custom business metrics in scrapers | Not started |
 | 7.5 — Structured JSON logging (structlog) | Not started |
 | 7.6 — Synthetic canary Lambda | Not started |
 

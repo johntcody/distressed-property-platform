@@ -43,8 +43,8 @@ async def lifespan(app: FastAPI):
     _pool = None
 
 
-app = FastAPI(title="Alert Engine", version="1.0.0", lifespan=lifespan, dependencies=[Depends(require_auth)
-add_rate_limiting(app)])
+app = FastAPI(title="Alert Engine", version="1.0.0", lifespan=lifespan, dependencies=[Depends(require_auth)])
+add_rate_limiting(app)
 
 
 @app.get("/health")
