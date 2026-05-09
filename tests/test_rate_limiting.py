@@ -8,7 +8,9 @@ Tests verify:
 - Rate-limit key falls back to client IP for unauthenticated paths
 - add_rate_limiting() correctly attaches limiter and exception handler
 
-No real Redis or external state — slowapi's in-memory backend is used.
+Each test that exercises the 429 path creates its own isolated Limiter +
+FastAPI app so no shared state is touched. This avoids relying on
+slowapi's private _storage attribute for resets.
 """
 
 from __future__ import annotations
@@ -16,30 +18,31 @@ from __future__ import annotations
 import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
-from api.middleware import add_rate_limiting, limiter, _rate_limit_key
-
-
-# ── shared fixture: reset limiter storage before every test ───────────────────
-
-@pytest.fixture(autouse=True)
-def reset_limiter():
-    """Prevent rate-limit state from leaking between tests."""
-    limiter._storage.reset()
-    yield
-    limiter._storage.reset()
+from api.middleware import _rate_limit_key, add_rate_limiting, limiter
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
-def _make_app(route_limit: str | None = None) -> FastAPI:
-    """Create a minimal FastAPI app with rate limiting wired up."""
+def _make_isolated_app(route_limit: str | None = None) -> FastAPI:
+    """Create a FastAPI app with its own isolated Limiter instance.
+
+    Using a fresh Limiter per app avoids any shared in-memory state between
+    tests without relying on slowapi's private _storage attribute.
+    """
+    isolated_limiter = Limiter(key_func=_rate_limit_key, default_limits=["60/minute"])
+
     app = FastAPI()
-    add_rate_limiting(app)
+    app.state.limiter = isolated_limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    app.add_middleware(SlowAPIMiddleware)
 
     if route_limit:
         @app.get("/limited")
-        @limiter.limit(route_limit)
+        @isolated_limiter.limit(route_limit)
         async def limited_route(request: Request):
             return {"ok": True}
     else:
@@ -101,7 +104,7 @@ class TestAddRateLimiting:
 
     def test_rate_limit_exceeded_returns_429(self):
         """Exhaust the per-route limit; the next request must get 429."""
-        app = _make_app(route_limit="2/minute")
+        app = _make_isolated_app(route_limit="2/minute")
         client = TestClient(app, raise_server_exceptions=False)
 
         resp1 = client.get("/limited")
@@ -112,8 +115,8 @@ class TestAddRateLimiting:
         assert resp2.status_code == 200
         assert resp3.status_code == 429
 
-    def test_429_response_is_json(self):
-        app = _make_app(route_limit="1/minute")
+    def test_429_response_has_content(self):
+        app = _make_isolated_app(route_limit="1/minute")
         client = TestClient(app, raise_server_exceptions=False)
 
         client.get("/limited")        # consume the 1 allowed
@@ -123,11 +126,15 @@ class TestAddRateLimiting:
         assert resp.content
 
     def test_health_not_rate_limited(self):
-        """Health endpoint should always return 200 regardless of limit state."""
-        app = _make_app(route_limit="1/minute")
+        """/health returns 200 even after the route limit on /limited is exhausted.
+
+        /health has no @limiter.limit decorator; its 60/min default applies
+        to a separate bucket so exhausting /limited does not affect it.
+        """
+        app = _make_isolated_app(route_limit="1/minute")
         client = TestClient(app, raise_server_exceptions=False)
 
-        # Exhaust the limit on /limited first
+        # Exhaust /limited so rate-limit state is active
         client.get("/limited")
         client.get("/limited")
 
@@ -136,13 +143,13 @@ class TestAddRateLimiting:
             assert resp.status_code == 200
 
 
-# ── default limit (60/minute via add_rate_limiting) ──────────────────────────
+# ── default limit (60/minute) ─────────────────────────────────────────────────
 
 class TestDefaultLimit:
     def test_route_without_decorator_uses_default(self):
-        """Routes without @limiter.limit use the 60/minute default — just verify
-        the middleware is present and the route returns 200 for normal traffic."""
-        app = _make_app()  # no explicit route_limit
+        """Routes without @limiter.limit use the 60/minute default — verify
+        normal traffic passes through."""
+        app = _make_isolated_app()  # no explicit route_limit
         client = TestClient(app, raise_server_exceptions=False)
 
         resp = client.get("/limited")
@@ -155,28 +162,20 @@ class TestPerUserIsolation:
     def test_two_users_share_same_ip_get_separate_buckets(self):
         """Two authenticated users behind the same IP must not share a bucket.
 
-        This validates the primary value of keying on token.sub instead of IP.
+        Validates that keying on token.sub (not client IP) gives each investor
+        an independent rate-limit counter.
         """
         from types import SimpleNamespace
 
-        app = _make_app(route_limit="1/minute")
-        client = TestClient(app, raise_server_exceptions=False)
-
-        # Exhaust user-alice's bucket
-        with_alice = {"X-Test-User": "alice"}
-        with_bob = {"X-Test-User": "bob"}
-
-        # Directly test the key function with two distinct user tokens
         req_alice = SimpleNamespace(
             state=SimpleNamespace(token=SimpleNamespace(sub="alice")),
             client=SimpleNamespace(host="1.2.3.4"),
         )
         req_bob = SimpleNamespace(
             state=SimpleNamespace(token=SimpleNamespace(sub="bob")),
-            client=SimpleNamespace(host="1.2.3.4"),  # same IP
+            client=SimpleNamespace(host="1.2.3.4"),  # same IP as alice
         )
 
-        # Both users share the same IP but get different bucket keys
         assert _rate_limit_key(req_alice) == "alice"
         assert _rate_limit_key(req_bob) == "bob"
         assert _rate_limit_key(req_alice) != _rate_limit_key(req_bob)

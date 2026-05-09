@@ -14,13 +14,13 @@ Usage in each service main.py:
         ...
 
 Default limits (applied via add_rate_limiting):
-    - All routes:          60 req/min per IP (catch-all)
-    - /api/v1/opportunities:       30 req/min per authenticated user ID
-    - /api/v1/properties/{id}/analysis: 60 req/min per authenticated user ID
+    - All routes:          60 req/min per user (token.sub when authenticated, else client IP)
+    - /api/v1/opportunities:       30 req/min per user
+    - /api/v1/properties/{id}/analysis: 60 req/min per user
 
-Key function uses the authenticated user's sub claim when available so that
-users behind a shared NAT are not unfairly throttled against each other.
-Falls back to client IP for unauthenticated paths (/health).
+Key function uses the authenticated user's JWT sub claim when available so
+that investors behind a shared NAT are not throttled against each other.
+Falls back to client IP for unauthenticated paths (e.g. /health).
 """
 
 from __future__ import annotations
@@ -35,8 +35,8 @@ def _rate_limit_key(request: Request) -> str:
     """Rate-limit key: authenticated user ID when available, else client IP.
 
     slowapi calls this function to determine the bucket for each request.
-    Using the JWT sub claim (set by require_auth on app.state) means each
-    investor gets their own bucket even behind a shared NAT gateway.
+    Using the JWT sub claim (stored by require_auth on request.state.token)
+    means each investor gets their own bucket even behind a shared NAT gateway.
     """
     # require_auth stores the decoded token on request.state.token
     token = getattr(request.state, "token", None)

@@ -3,23 +3,33 @@ Description: >
   DPIP WAF WebACL — attached to CloudFront.
   Provides:
     - OWASP CRS managed rules (common attacks + SQLi)
-    - Per-IP rate limit: 100 req / 5 min → HTTP 429
+    - Per-IP rate limit: 100 req / 5 min -> HTTP 429
     - Geo-block: non-US traffic
-    - WAF logging to CloudWatch aws-waf-logs-dpip
+    - WAF logging to CloudWatch log group aws-waf-logs-dpip-{Environment}
+
+  IMPORTANT: This stack must be deployed in us-east-1.
+  AWS WAFv2 with Scope: CLOUDFRONT is a global resource that CloudFormation
+  only supports from the us-east-1 region. Deploying in any other region
+  will fail with "WAF is not available in this region."
 
 Parameters:
   Environment:
     Type: String
     Default: production
     AllowedValues: [production, staging]
+    Description: >
+      Deployment environment. Included in all resource names so staging and
+      production stacks can coexist in the same account without collision.
 
 Resources:
 
   # ── CloudWatch log group for WAF ──────────────────────────────────────────────
+  # Log group name must start with "aws-waf-logs-" (AWS WAFv2 requirement).
+  # Scoped with ${Environment} so staging/prod stacks do not collide.
   WafLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: aws-waf-logs-dpip
+      LogGroupName: !Sub aws-waf-logs-dpip-${Environment}
       RetentionInDays: 90
 
   # ── WebACL ────────────────────────────────────────────────────────────────────
@@ -103,12 +113,15 @@ Resources:
           Content: '{"error":"rate_limit_exceeded","message":"Too many requests. Please wait before retrying."}'
 
   # ── WAF logging configuration ─────────────────────────────────────────────────
+  # LogDestinationConfigs uses !GetAtt WafLogGroup.Arn so CloudFormation
+  # infers the creation dependency automatically — the log group is guaranteed
+  # to exist before WAF logging configuration is created.
   WafLoggingConfig:
     Type: AWS::WAFv2::LoggingConfiguration
     Properties:
       ResourceArn: !GetAtt DPIPWebACL.Arn
       LogDestinationConfigs:
-        - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:aws-waf-logs-dpip
+        - !GetAtt WafLogGroup.Arn
       LoggingFilter:
         DefaultBehavior: DROP
         Filters:
@@ -122,11 +135,12 @@ Resources:
                   Action: COUNT
 
   # ── CloudWatch alarms ─────────────────────────────────────────────────────────
+  # AlarmName values include ${Environment} to avoid collisions across stacks.
   RateLimitAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: dpip-waf-rate-limit-hits
-      AlarmDescription: WAF is blocking requests due to IP rate limiting — possible DDoS or scraper
+      AlarmName: !Sub dpip-waf-rate-limit-hits-${Environment}
+      AlarmDescription: WAF is blocking requests due to IP rate limiting - possible DDoS or scraper
       Namespace: AWS/WAFV2
       MetricName: BlockedRequests
       Dimensions:
@@ -143,13 +157,13 @@ Resources:
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
       AlarmActions:
-        - !Sub arn:aws:sns:${AWS::Region}:${AWS::AccountId}:dpip-alerts
+        - !Sub arn:aws:sns:us-east-1:${AWS::AccountId}:dpip-alerts
 
   OWASPBlockAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: dpip-waf-owasp-blocks
-      AlarmDescription: WAF OWASP managed rules are blocking requests — possible attack
+      AlarmName: !Sub dpip-waf-owasp-blocks-${Environment}
+      AlarmDescription: WAF OWASP managed rules are blocking requests - possible attack
       Namespace: AWS/WAFV2
       MetricName: BlockedRequests
       Dimensions:
@@ -166,15 +180,15 @@ Resources:
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
       AlarmActions:
-        - !Sub arn:aws:sns:${AWS::Region}:${AWS::AccountId}:dpip-alerts
+        - !Sub arn:aws:sns:us-east-1:${AWS::AccountId}:dpip-alerts
 
 Outputs:
   WebACLArn:
-    Description: ARN of the WAF WebACL — attach to CloudFront distribution
+    Description: ARN of the WAF WebACL - attach to CloudFront distribution
     Value: !GetAtt DPIPWebACL.Arn
     Export:
       Name: !Sub dpip-waf-webacl-arn-${Environment}
 
   WafLogGroupName:
     Description: CloudWatch log group receiving WAF block logs
-    Value: aws-waf-logs-dpip
+    Value: !Sub aws-waf-logs-dpip-${Environment}
