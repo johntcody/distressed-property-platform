@@ -11,7 +11,7 @@ import asyncpg
 import httpx
 from fastapi import FastAPI, HTTPException
 
-from services.config import get_db_url, get_estated_api_key
+from services.config import get_db_url
 from .client import get_avm
 from .models import AvmRequest, AvmResponse
 

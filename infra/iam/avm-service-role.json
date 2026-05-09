@@ -1,5 +1,6 @@
 {
   "_comment": "IAM role for the AVM service ECS task. Adds the Estated API key on top of the base FastAPI role. Defined separately so the API key is not accessible to other services.",
+  "_comment_arns": "Resource ARNs use wildcard account ID (*) for portability across dev/staging/prod accounts. Replace * with the literal AWS account ID before deploying to production.",
   "RoleName": "dpip-avm-service",
   "AssumeRolePolicyDocument": {
     "Version": "2012-10-17",

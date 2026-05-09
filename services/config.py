@@ -15,21 +15,27 @@ from __future__ import annotations
 import json
 import os
 from functools import lru_cache
-from typing import Any
 
 import boto3
 from botocore.exceptions import ClientError
 
-_LOCAL_MODE = os.environ.get("AWS_SECRETS_MANAGER_ENDPOINT", "").lower() == "local"
 
-_boto_client: Any = None
+def _is_local() -> bool:
+    """Re-evaluated each call so tests can toggle the env var after import."""
+    return os.environ.get("AWS_SECRETS_MANAGER_ENDPOINT", "").lower() == "local"
 
 
 def _client():
-    global _boto_client
-    if _boto_client is None:
-        _boto_client = boto3.client("secretsmanager", region_name=os.environ.get("AWS_REGION", "us-east-1"))
-    return _boto_client
+    """Return a fresh boto3 Secrets Manager client.
+
+    boto3 clients are cheap to construct and thread-safe; lru_cache on
+    get_secret() prevents excess API calls, so there is no benefit to
+    caching the client itself.
+    """
+    return boto3.client(
+        "secretsmanager",
+        region_name=os.environ.get("AWS_REGION", "us-east-1"),
+    )
 
 
 @lru_cache(maxsize=64)
@@ -41,11 +47,11 @@ def get_secret(name: str) -> str:
     developers set DATABASE_URL etc. in .env files without touching AWS.
 
     In production the value is fetched from Secrets Manager once and cached
-    for the lifetime of the process.  Rotation-safe: if Secrets Manager
-    returns SecretRotationInProgress the client automatically retries with
-    the new secret value.
+    for the lifetime of the process.  Secret rotation takes effect on the
+    next ECS task restart or Lambda cold start — the cache does not
+    auto-refresh mid-process.
     """
-    if _LOCAL_MODE:
+    if _is_local():
         env_key = name.replace("/", "_").replace(".", "_").replace("-", "_").upper()
         value = os.environ.get(env_key)
         if value is None:
