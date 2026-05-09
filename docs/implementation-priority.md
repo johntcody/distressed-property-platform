@@ -114,7 +114,7 @@ These are not code tasks but must be resolved before the phases that depend on t
 | 4.3 — Alert engine | **Complete** — `services/alert_engine/`; SQS consumer, matcher, notifier stubs (email/SMS/push), daily digest; migration 013 |
 | 5.1 — Investor pipeline CRUD | Not started |
 | 5.2 — Frontend (Next.js) | Not started |
-| 6.1 — JWT auth on all endpoints | In Progress — `api/deps.py`; wired into all 12 services (10 microservices + api-gateway + property-service); auth failure logging; missing-claim enforcement; 15 auth tests pass |
+| 6.1 — JWT auth on all endpoints | **Complete** — `api/deps.py`; wired into all 12 services (10 microservices + api-gateway + property-service); auth failure logging; missing-claim enforcement; 15 auth tests pass |
 | 6.2 — Secrets Manager + IAM roles per service | **Complete** — `services/config.py`; `infra/iam/`; all 11 services switched to `get_db_url()`; trufflehog CI scan added |
 | 6.3 — Least-privilege DB users | **Complete** — `db/migrations/014_least_privilege_users.sql`; verified on Neon dev DB |
 | 6.4 — WAF + rate limiting | Not started |
