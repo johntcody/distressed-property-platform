@@ -128,7 +128,7 @@ These are not code tasks but must be resolved before the phases that depend on t
 | 7.6 — Synthetic canary Lambda | Not started |
 
 
-# Revised Priority Order
+## Revised Priority Order
 Phase 0  — Foundation
   + 6.3  Least-privilege DB users
 
