@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from services.config import get_db_url
 from api.deps import require_auth
+from api.middleware import add_rate_limiting
 
 import json
 import os
@@ -33,7 +34,8 @@ async def lifespan(app: FastAPI):
     _pool = None
 
 
-app = FastAPI(title="Rehab Engine", version="1.0.0", lifespan=lifespan, dependencies=[Depends(require_auth)])
+app = FastAPI(title="Rehab Engine", version="1.0.0", lifespan=lifespan, dependencies=[Depends(require_auth)
+add_rate_limiting(app)])
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────

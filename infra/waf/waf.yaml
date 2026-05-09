@@ -1,0 +1,180 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  DPIP WAF WebACL — attached to CloudFront.
+  Provides:
+    - OWASP CRS managed rules (common attacks + SQLi)
+    - Per-IP rate limit: 100 req / 5 min → HTTP 429
+    - Geo-block: non-US traffic
+    - WAF logging to CloudWatch /aws/waf/dpip
+
+Parameters:
+  Environment:
+    Type: String
+    Default: production
+    AllowedValues: [production, staging]
+
+Resources:
+
+  # ── CloudWatch log group for WAF ──────────────────────────────────────────────
+  WafLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/waf/dpip
+      RetentionInDays: 90
+
+  # ── WebACL ────────────────────────────────────────────────────────────────────
+  DPIPWebACL:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: !Sub dpip-waf-${Environment}
+      Scope: CLOUDFRONT
+      DefaultAction:
+        Allow: {}
+      VisibilityConfig:
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: !Sub dpip-waf-${Environment}
+      Rules:
+
+        # Rule 1 — Geo-block: allow only US traffic (priority 0, evaluated first)
+        - Name: GeoBlockNonUS
+          Priority: 0
+          Action:
+            Block: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: GeoBlockNonUS
+          Statement:
+            NotStatement:
+              Statement:
+                GeoMatchStatement:
+                  CountryCodes:
+                    - US
+
+        # Rule 2 — Per-IP rate limit: 100 req per 5 min (WAF evaluates over 5-min window)
+        - Name: RateLimitPerIP
+          Priority: 1
+          Action:
+            Block:
+              CustomResponse:
+                ResponseCode: 429
+                CustomResponseBodyKey: TooManyRequests
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: RateLimitPerIP
+          Statement:
+            RateBasedStatement:
+              Limit: 100
+              AggregateKeyType: IP
+
+        # Rule 3 — OWASP Common Rule Set (XSS, path traversal, bad bots, etc.)
+        - Name: AWSManagedRulesCommonRuleSet
+          Priority: 2
+          OverrideAction:
+            None: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: AWSManagedRulesCommonRuleSet
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesCommonRuleSet
+
+        # Rule 4 — SQL injection managed rule set
+        - Name: AWSManagedRulesSQLiRuleSet
+          Priority: 3
+          OverrideAction:
+            None: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: AWSManagedRulesSQLiRuleSet
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesSQLiRuleSet
+
+      CustomResponseBodies:
+        TooManyRequests:
+          ContentType: APPLICATION_JSON
+          Content: '{"error":"rate_limit_exceeded","message":"Too many requests. Please wait before retrying."}'
+
+  # ── WAF logging configuration ─────────────────────────────────────────────────
+  WafLoggingConfig:
+    Type: AWS::WAFv2::LoggingConfiguration
+    Properties:
+      ResourceArn: !GetAtt DPIPWebACL.Arn
+      LogDestinationConfigs:
+        - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/waf/dpip
+      LoggingFilter:
+        DefaultBehavior: DROP
+        Filters:
+          # Log all blocked requests (rate limit hits, WAF rule blocks, geo-blocks)
+          - Behavior: KEEP
+            Requirement: MEETS_ANY
+            Conditions:
+              - ActionCondition:
+                  Action: BLOCK
+              - ActionCondition:
+                  Action: COUNT
+
+  # ── CloudWatch alarms ─────────────────────────────────────────────────────────
+  RateLimitAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: dpip-waf-rate-limit-hits
+      AlarmDescription: WAF is blocking requests due to IP rate limiting — possible DDoS or scraper
+      Namespace: AWS/WAFV2
+      MetricName: BlockedRequests
+      Dimensions:
+        - Name: WebACL
+          Value: !Ref DPIPWebACL
+        - Name: Rule
+          Value: RateLimitPerIP
+        - Name: Region
+          Value: CloudFront
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 50
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Sub arn:aws:sns:${AWS::Region}:${AWS::AccountId}:dpip-alerts
+
+  OWASPBlockAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: dpip-waf-owasp-blocks
+      AlarmDescription: WAF OWASP managed rules are blocking requests — possible attack
+      Namespace: AWS/WAFV2
+      MetricName: BlockedRequests
+      Dimensions:
+        - Name: WebACL
+          Value: !Ref DPIPWebACL
+        - Name: Rule
+          Value: AWSManagedRulesCommonRuleSet
+        - Name: Region
+          Value: CloudFront
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 10
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Sub arn:aws:sns:${AWS::Region}:${AWS::AccountId}:dpip-alerts
+
+Outputs:
+  WebACLArn:
+    Description: ARN of the WAF WebACL — attach to CloudFront distribution
+    Value: !GetAtt DPIPWebACL.Arn
+    Export:
+      Name: !Sub dpip-waf-webacl-arn-${Environment}
+
+  WafLogGroupName:
+    Description: CloudWatch log group receiving WAF block logs
+    Value: /aws/waf/dpip

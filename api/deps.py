@@ -178,7 +178,11 @@ def require_auth(
         )
 
     try:
-        return _verify_token(credentials.credentials, request)
+        token = _verify_token(credentials.credentials, request)
+        # Store on request.state so slowapi's rate-limit key function can read
+        # the authenticated user ID without re-decoding the token.
+        request.state.token = token
+        return token
     except RuntimeError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

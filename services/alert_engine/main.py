@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from services.config import get_db_url
 from api.deps import require_auth
+from api.middleware import add_rate_limiting
 
 import asyncio
 import logging
@@ -42,7 +43,8 @@ async def lifespan(app: FastAPI):
     _pool = None
 
 
-app = FastAPI(title="Alert Engine", version="1.0.0", lifespan=lifespan, dependencies=[Depends(require_auth)])
+app = FastAPI(title="Alert Engine", version="1.0.0", lifespan=lifespan, dependencies=[Depends(require_auth)
+add_rate_limiting(app)])
 
 
 @app.get("/health")

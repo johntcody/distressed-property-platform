@@ -7,6 +7,7 @@ import asyncpg
 from fastapi import Depends, FastAPI
 
 from api.deps import require_auth
+from api.middleware import add_rate_limiting
 from services.config import get_db_url
 from .routes import router
 
@@ -38,6 +39,7 @@ app = FastAPI(
     lifespan=lifespan,
     dependencies=[Depends(require_auth)],
 )
+add_rate_limiting(app)
 app.include_router(router, prefix="/api/v1")
 
 
