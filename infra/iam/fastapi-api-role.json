@@ -1,7 +1,7 @@
 {
-  "_comment": "IAM role for the avm_service ECS task. Adds the ATTOM API key secret on top of the base API role. Scoped separately so the AVM key is not readable by other services.",
+  "_comment": "IAM role for FastAPI services that do NOT touch SQS: opportunity_dashboard, property_detail, distress_score, equity_engine, market_score, arv_engine, rehab_engine, mao_engine, property_service. Grants DB access only.",
   "_comment_arns": "Resource ARNs use wildcard account ID (*) for portability. Replace * with the literal AWS account ID before deploying to production.",
-  "RoleName": "dpip-avm-service",
+  "RoleName": "dpip-fastapi-api",
   "AssumeRolePolicyDocument": {
     "Version": "2012-10-17",
     "Statement": [
@@ -20,8 +20,7 @@
         "Effect": "Allow",
         "Action": "secretsmanager:GetSecretValue",
         "Resource": [
-          "arn:aws:secretsmanager:us-east-1:*:secret:dpip/db/app_user-*",
-          "arn:aws:secretsmanager:us-east-1:*:secret:dpip/avm/attom_api_key-*"
+          "arn:aws:secretsmanager:us-east-1:*:secret:dpip/db/app_user-*"
         ]
       },
       {

@@ -74,8 +74,8 @@ async def _fetch_cached(
 
 async def _call_attom(address: str, city: str, state: str, zip_code: str) -> dict:
     """Call the ATTOM Property Detail endpoint and return the raw JSON."""
-    from services.config import get_estated_api_key
-    api_key = get_estated_api_key()
+    from services.config import get_attom_api_key
+    api_key = get_attom_api_key()
     async with httpx.AsyncClient(timeout=15) as client:
         r = await client.get(
             _ATTOM_BASE,

@@ -6,8 +6,11 @@ memory for the lifetime of the process.  Services must never read credentials
 from environment variables in production; use get_secret() instead.
 
 Local / CI override: if the environment variable AWS_SECRETS_MANAGER_ENDPOINT
-is set to "local", get_secret() falls back to os.environ so that unit tests
-and local docker-compose runs work without AWS credentials.
+is set to "local", get_secret() reads from os.environ instead of Secrets
+Manager.  The secret name is mapped to an env var key by replacing all "/",
+".", and "-" characters with "_" and uppercasing the result, e.g.:
+  dpip/db/app_user  ->  DPIP_DB_APP_USER
+  dpip/avm/attom_api_key  ->  DPIP_AVM_ATTOM_API_KEY
 """
 
 from __future__ import annotations
@@ -26,11 +29,10 @@ def _is_local() -> bool:
 
 
 def _client():
-    """Return a fresh boto3 Secrets Manager client.
+    """Return a boto3 Secrets Manager client.
 
-    boto3 clients are cheap to construct and thread-safe; lru_cache on
-    get_secret() prevents excess API calls, so there is no benefit to
-    caching the client itself.
+    Constructed per-call; boto3 clients are cheap and thread-safe.
+    lru_cache on get_secret() prevents excess Secrets Manager API calls.
     """
     return boto3.client(
         "secretsmanager",
@@ -38,29 +40,34 @@ def _client():
     )
 
 
-@lru_cache(maxsize=64)
-def get_secret(name: str) -> str:
-    """Return the secret string for *name*.
+def _secret_name_to_env_key(name: str) -> str:
+    """Convert a secret name to the equivalent local env var key.
 
-    In local mode the secret name is used as an environment variable key
-    (dots and slashes replaced with underscores, upper-cased).  This lets
-    developers set DATABASE_URL etc. in .env files without touching AWS.
-
-    In production the value is fetched from Secrets Manager once and cached
-    for the lifetime of the process.  Secret rotation takes effect on the
-    next ECS task restart or Lambda cold start — the cache does not
-    auto-refresh mid-process.
+    Replaces "/", ".", and "-" with "_" then uppercases.
+    e.g. "dpip/db/app_user" -> "DPIP_DB_APP_USER"
     """
-    if _is_local():
-        env_key = name.replace("/", "_").replace(".", "_").replace("-", "_").upper()
-        value = os.environ.get(env_key)
-        if value is None:
-            raise RuntimeError(
-                f"Local mode: environment variable {env_key!r} not set "
-                f"(maps to secret {name!r})"
-            )
-        return value
+    return name.replace("/", "_").replace(".", "_").replace("-", "_").upper()
 
+
+def _get_secret_local(name: str) -> str:
+    """Read secret from environment (local/CI mode). Never cached."""
+    env_key = _secret_name_to_env_key(name)
+    value = os.environ.get(env_key)
+    if value is None:
+        raise RuntimeError(
+            f"Local mode: environment variable {env_key!r} not set "
+            f"(maps to secret {name!r})"
+        )
+    return value
+
+
+@lru_cache(maxsize=64)
+def _get_secret_remote(name: str) -> str:
+    """Fetch secret from Secrets Manager and cache for the process lifetime.
+
+    Secret rotation takes effect on the next ECS task restart or Lambda
+    cold start — the cache does not auto-refresh mid-process.
+    """
     try:
         response = _client().get_secret_value(SecretId=name)
     except ClientError as exc:
@@ -78,10 +85,23 @@ def get_secret(name: str) -> str:
     try:
         parsed = json.loads(secret)
         if isinstance(parsed, dict) and len(parsed) == 1:
-            return next(iter(parsed.values()))
+            # str() coercion ensures return type is always str even if JSON value is numeric.
+            return str(next(iter(parsed.values())))
         return secret
     except (json.JSONDecodeError, StopIteration):
         return secret
+
+
+def get_secret(name: str) -> str:
+    """Return the secret string for *name*.
+
+    In local mode (AWS_SECRETS_MANAGER_ENDPOINT=local) reads from env vars —
+    never cached so toggles mid-test take effect immediately.
+    In production mode reads from Secrets Manager with process-lifetime caching.
+    """
+    if _is_local():
+        return _get_secret_local(name)
+    return _get_secret_remote(name)
 
 
 # ── Convenience accessors ──────────────────────────────────────────────────────
@@ -102,6 +122,6 @@ def get_sqs_queue_url() -> str:
     return get_secret("dpip/sqs/alert_queue_url")
 
 
-def get_estated_api_key() -> str:
-    """Estated AVM API key for the AVM service."""
-    return get_secret("dpip/avm/estated_api_key")
+def get_attom_api_key() -> str:
+    """ATTOM Data API key for the AVM service."""
+    return get_secret("dpip/avm/attom_api_key")
