@@ -1,0 +1,37 @@
+{
+  "_comment": "IAM role assumed by all FastAPI ECS tasks (opportunity_dashboard, property_detail, distress_score, equity_engine, market_score, arv_engine, rehab_engine, mao_engine, alert_engine, avm_service, property_service). Scoped to only the secrets each service needs at runtime.",
+  "RoleName": "dpip-fastapi-services",
+  "AssumeRolePolicyDocument": {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Effect": "Allow",
+        "Principal": { "Service": "ecs-tasks.amazonaws.com" },
+        "Action": "sts:AssumeRole"
+      }
+    ]
+  },
+  "InlinePolicy": {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Sid": "SecretsManagerRuntimeSecrets",
+        "Effect": "Allow",
+        "Action": "secretsmanager:GetSecretValue",
+        "Resource": [
+          "arn:aws:secretsmanager:us-east-1:*:secret:dpip/db/app_user-*",
+          "arn:aws:secretsmanager:us-east-1:*:secret:dpip/sqs/alert_queue_url-*"
+        ]
+      },
+      {
+        "Sid": "CloudWatchLogs",
+        "Effect": "Allow",
+        "Action": [
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ],
+        "Resource": "arn:aws:logs:us-east-1:*:log-group:/dpip/*"
+      }
+    ]
+  }
+}

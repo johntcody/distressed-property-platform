@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Optional
@@ -12,6 +11,7 @@ import asyncpg
 import httpx
 from fastapi import FastAPI, HTTPException
 
+from services.config import get_db_url, get_estated_api_key
 from .client import get_avm
 from .models import AvmRequest, AvmResponse
 
@@ -21,7 +21,7 @@ _pool: Optional[asyncpg.Pool] = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _pool
-    dsn = os.environ.get("DATABASE_URL")
+    dsn = get_db_url()
     _pool = await asyncpg.create_pool(dsn=dsn, min_size=2, max_size=10, command_timeout=30)
     app.state.pool = _pool
     yield

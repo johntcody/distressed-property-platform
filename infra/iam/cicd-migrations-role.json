@@ -1,0 +1,32 @@
+{
+  "_comment": "IAM role assumed by the CI/CD pipeline migration step only. Has access to migrations_user DB credentials. Must never be assumed by running services.",
+  "RoleName": "dpip-cicd-migrations",
+  "AssumeRolePolicyDocument": {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Effect": "Allow",
+        "Principal": { "Service": "ecs-tasks.amazonaws.com" },
+        "Action": "sts:AssumeRole",
+        "Condition": {
+          "StringEquals": {
+            "aws:RequestedRegion": "us-east-1"
+          }
+        }
+      }
+    ]
+  },
+  "InlinePolicy": {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Sid": "MigrationsDbCredential",
+        "Effect": "Allow",
+        "Action": "secretsmanager:GetSecretValue",
+        "Resource": [
+          "arn:aws:secretsmanager:us-east-1:*:secret:dpip/db/migrations_user-*"
+        ]
+      }
+    ]
+  }
+}

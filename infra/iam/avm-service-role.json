@@ -1,0 +1,37 @@
+{
+  "_comment": "IAM role for the AVM service ECS task. Adds the Estated API key on top of the base FastAPI role. Defined separately so the API key is not accessible to other services.",
+  "RoleName": "dpip-avm-service",
+  "AssumeRolePolicyDocument": {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Effect": "Allow",
+        "Principal": { "Service": "ecs-tasks.amazonaws.com" },
+        "Action": "sts:AssumeRole"
+      }
+    ]
+  },
+  "InlinePolicy": {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Sid": "SecretsManagerRuntimeSecrets",
+        "Effect": "Allow",
+        "Action": "secretsmanager:GetSecretValue",
+        "Resource": [
+          "arn:aws:secretsmanager:us-east-1:*:secret:dpip/db/app_user-*",
+          "arn:aws:secretsmanager:us-east-1:*:secret:dpip/avm/estated_api_key-*"
+        ]
+      },
+      {
+        "Sid": "CloudWatchLogs",
+        "Effect": "Allow",
+        "Action": [
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ],
+        "Resource": "arn:aws:logs:us-east-1:*:log-group:/dpip/*"
+      }
+    ]
+  }
+}
