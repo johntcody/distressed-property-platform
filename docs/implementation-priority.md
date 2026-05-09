@@ -49,6 +49,32 @@
 | 5.1 | Save/track pipeline (CRUD) | Simple but depends on auth/users table |
 | 5.2 | Frontend (Next.js) | Build last; all APIs must be stable |
 
+## Phase 6 — Security Hardening
+
+Priority order to implement before production launch:
+
+| # | Task | Blocks |
+|---|---|---|
+| 6.1 | JWT auth on all endpoints (RS256, Cognito or Auth0) | Everything — no other security control matters without this |
+| 6.2 | Secrets Manager — remove all hardcoded/env creds; IAM role per service | Prevents credential leakage |
+| 6.3 | Least-privilege DB users — separate `app_user` (DML only) and `migrations_user` (DDL) | Limits blast radius of SQL injection or app compromise |
+| 6.4 | WAF + rate limiting — CloudFront WAF (OWASP ruleset, 100 req/IP/min) + `slowapi` in FastAPI | Required before any public traffic |
+| 6.5 | VPC + security groups — RDS/OpenSearch in private subnets, SGs with least-privilege ingress | Required before production data is stored |
+| 6.6 | Audit logging — CloudWatch metric filters on 401/403 spikes, RDS Performance Insights, CloudTrail | Required before investor onboarding |
+
+## Phase 7 — Monitoring
+
+Priority order to implement:
+
+| # | Task | Value |
+|---|---|---|
+| 7.1 | CloudWatch Container Insights on ECS cluster | Immediate CPU/memory/restart visibility, one-line change |
+| 7.2 | RDS Performance Insights + slow query log | Top SQL by load, free 7-day retention, zero code |
+| 7.3 | SQS DLQ alarm — alert if DLQ depth > 0 | Catches silent alert engine failures (malformed messages dropped) |
+| 7.4 | Custom business metrics in scrapers — events inserted per county per run | Detects silent parser failures that don't throw exceptions |
+| 7.5 | Structured JSON logging (`structlog`) across all FastAPI services | Enables CloudWatch Log Insights queries for 5xx, slow paths, auth failures |
+| 7.6 | Synthetic canary Lambda — poll `/health` + `/api/v1/opportunities` every 5 min | Catches routing, DNS, and cert issues that internal metrics miss |
+
 ---
 
 ## Decision Gates
@@ -88,3 +114,15 @@ These are not code tasks but must be resolved before the phases that depend on t
 | 4.3 — Alert engine | **Complete** — `services/alert_engine/`; SQS consumer, matcher, notifier stubs (email/SMS/push), daily digest; migration 013 |
 | 5.1 — Investor pipeline CRUD | Not started |
 | 5.2 — Frontend (Next.js) | Not started |
+| 6.1 — JWT auth on all endpoints | Not started |
+| 6.2 — Secrets Manager + IAM roles per service | Not started |
+| 6.3 — Least-privilege DB users | Not started |
+| 6.4 — WAF + rate limiting | Not started |
+| 6.5 — VPC + security groups | Not started |
+| 6.6 — Audit logging | Not started |
+| 7.1 — CloudWatch Container Insights | Not started |
+| 7.2 — RDS Performance Insights + slow query log | Not started |
+| 7.3 — SQS DLQ alarm | Not started |
+| 7.4 — Custom business metrics in scrapers | Not started |
+| 7.5 — Structured JSON logging (structlog) | Not started |
+| 7.6 — Synthetic canary Lambda | Not started |
