@@ -13,6 +13,7 @@ from fastapi import FastAPI, HTTPException, Depends
 
 from services.config import get_db_url
 from api.deps import require_auth
+from api.middleware import add_rate_limiting
 from .client import get_avm
 from .models import AvmRequest, AvmResponse
 
@@ -31,6 +32,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="AVM Service", version="1.0.0", lifespan=lifespan, dependencies=[Depends(require_auth)])
+add_rate_limiting(app)
 
 
 @app.get("/health")

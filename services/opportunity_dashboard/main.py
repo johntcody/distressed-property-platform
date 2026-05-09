@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from services.config import get_db_url
 from api.deps import require_auth
+from api.middleware import add_rate_limiting, limiter
 
 import os
 from contextlib import asynccontextmanager
@@ -12,7 +13,7 @@ from typing import Optional
 
 import asyncio
 import asyncpg
-from fastapi import FastAPI, Query, Depends
+from fastapi import FastAPI, Query, Depends, Request
 
 from .models import CaseType, OpportunitiesResponse, OpportunityItem, SortDir, SortField
 from .query import build_query
@@ -32,6 +33,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Opportunity Dashboard API", version="1.0.0", lifespan=lifespan, dependencies=[Depends(require_auth)])
+add_rate_limiting(app)
 
 
 @app.get("/health")
@@ -40,7 +42,9 @@ async def health():
 
 
 @app.get("/api/v1/opportunities", response_model=OpportunitiesResponse)
+@limiter.limit("30/minute")
 async def list_opportunities(
+    request: Request,
     county:              Optional[str]      = Query(None, description="Filter by county name (case-insensitive)"),
     case_type:           Optional[CaseType] = Query(None, description="foreclosure | tax_delinquency | probate | preforeclosure"),
     min_distress_score:  Optional[float] = Query(None, ge=0, le=100, description="Minimum distress score (0–100)"),

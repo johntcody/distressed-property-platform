@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from services.config import get_db_url
 from api.deps import require_auth
+from api.middleware import add_rate_limiting, limiter
 
 import asyncio
 import os
@@ -12,7 +13,7 @@ from typing import Optional
 from uuid import UUID
 
 import asyncpg
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request
 
 from .models import (
     AnalysisItem,
@@ -47,6 +48,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Property Detail API", version="1.0.0", lifespan=lifespan, dependencies=[Depends(require_auth)])
+add_rate_limiting(app)
 
 
 @app.get("/health")
@@ -139,7 +141,8 @@ async def get_events(property_id: UUID):
 
 
 @app.get("/api/v1/properties/{property_id}/analysis", response_model=AnalysisResponse)
-async def get_analysis(property_id: UUID):
+@limiter.limit("60/minute")
+async def get_analysis(request: Request, property_id: UUID):
     pool = app.state.pool
     await _require_property(pool, property_id)
     rows = await pool.fetch(ANALYSIS_SQL, property_id)
