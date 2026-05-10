@@ -108,12 +108,12 @@ Internet
 
 | SG | Inbound | Outbound |
 |---|---|---|
-| ALB SG | 443, 80 from `0.0.0.0/0` | All (to ECS private subnets) |
+| ALB SG | 443, 80 from `0.0.0.0/0` | 443, 80 to ECS SG only |
 | ECS SG | 443, 80 from ALB SG | All unrestricted (via NAT) |
-| RDS SG | 5432 from ECS SG + Lambda SG | All |
+| RDS SG | 5432 from ECS SG + Lambda SG | All protocols to VPC CIDR only |
 | OpenSearch SG | 443 from ECS SG | All |
 | Lambda SG | None | All unrestricted (via NAT) |
 
 ### VPC Flow Logs
 - All VPC traffic logged to CloudWatch `/dpip/vpc/flow-logs-<env>` (30-day retention)
-- CloudWatch metric filter + alarm triggers on REJECT records from the RDS subnet CIDR
+- CloudWatch metric filter + alarm triggers on REJECT records from either private subnet prefix (`10.0.10.*` / `10.0.11.*`) — covers all workloads in the shared private subnets (ECS, RDS, OpenSearch, Lambda)

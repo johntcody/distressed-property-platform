@@ -41,6 +41,26 @@ Parameters:
     Type: String
     Default: "10.0.11.0/24"
 
+  # Prefix wildcards used by the CloudWatch metric filter to match flow log
+  # srcaddr. Must stay in sync with PrivateSubnet1Cidr / PrivateSubnet2Cidr.
+  # Example: CIDR 10.0.10.0/24 → Prefix "10.0.10."
+  PrivateSubnet1Prefix:
+    Type: String
+    Default: "10.0.10."
+    Description: IP prefix (no mask) matching all hosts in PrivateSubnet1Cidr
+
+  PrivateSubnet2Prefix:
+    Type: String
+    Default: "10.0.11."
+    Description: IP prefix (no mask) matching all hosts in PrivateSubnet2Cidr
+
+  AlertsTopicArn:
+    Type: String
+    Description: >
+      ARN of the SNS topic that receives CloudWatch alarm notifications
+      (e.g. arn:aws:sns:us-east-1:123456789012:dpip-alerts).
+      Import from the notifications stack or provide explicitly.
+
 
 Resources:
 
@@ -208,9 +228,16 @@ Resources:
           CidrIp: "0.0.0.0/0"
           Description: HTTP from internet (redirect to HTTPS)
       SecurityGroupEgress:
-        - IpProtocol: "-1"
-          CidrIp: "0.0.0.0/0"
-          Description: ALB can reach ECS tasks in private subnets
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          DestinationSecurityGroupId: !Ref EcsSecurityGroup
+          Description: HTTPS to ECS tasks
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          DestinationSecurityGroupId: !Ref EcsSecurityGroup
+          Description: HTTP to ECS tasks
       Tags:
         - Key: Name
           Value: !Sub dpip-sg-alb-${Environment}
@@ -260,7 +287,7 @@ Resources:
       SecurityGroupEgress:
         - IpProtocol: "-1"
           CidrIp: !Ref VpcCidr
-          Description: RDS outbound restricted to VPC CIDR (replication only; no internet path)
+          Description: All protocols to VPC CIDR only — no internet path from private subnet
       Tags:
         - Key: Name
           Value: !Sub dpip-sg-rds-${Environment}
@@ -326,7 +353,10 @@ Resources:
                 Action:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
-                Resource: !GetAtt FlowLogGroup.Arn
+                # CreateLogStream/PutLogEvents are evaluated against log-stream
+                # ARNs, not the log-group ARN. The :* suffix covers all streams
+                # within this log group.
+                Resource: !Sub "${FlowLogGroup.Arn}:*"
 
   VpcFlowLog:
     Type: AWS::EC2::FlowLog
@@ -341,21 +371,25 @@ Resources:
         - Key: Name
           Value: !Sub dpip-flow-log-${Environment}
 
-  # ── CloudWatch Alarm — unexpected outbound from RDS private subnet ────────────
-  # Flow logs record rejected packets. An alarm on REJECT records from the RDS
-  # CIDR catches misconfigured rules or lateral movement attempts.
-  RdsOutboundRejectAlarm:
+  # ── CloudWatch Alarm — REJECT traffic in private subnets ─────────────────────
+  # The private subnets are shared by ECS, RDS, OpenSearch, and Lambda. The
+  # metric filter below matches REJECT records where srcaddr is in either private
+  # subnet prefix. This catches misconfigured SG rules or lateral-movement
+  # attempts from any workload in those subnets — not exclusively RDS.
+  PrivateSubnetRejectAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: !Sub dpip-vpc-rds-outbound-reject-${Environment}
+      AlarmName: !Sub dpip-vpc-private-subnet-reject-${Environment}
       AlarmDescription: >
-        VPC Flow Logs detected REJECT records originating from the RDS subnet.
-        This may indicate a misconfigured security group or lateral movement attempt.
+        VPC Flow Logs detected REJECT records originating from the private subnets
+        (10.0.10.*/10.0.11.*). Covers all workloads in those subnets (ECS, RDS,
+        OpenSearch, Lambda). May indicate a misconfigured security group or lateral
+        movement attempt.
       # Namespace + MetricName must exactly match the MetricTransformations in
-      # RdsOutboundRejectFilter below. Custom metric filters have no automatic
+      # PrivateSubnetRejectFilter below. Custom metric filters emit no automatic
       # dimensions, so the Dimensions block is intentionally omitted.
       Namespace: DPIP/VPC
-      MetricName: RdsSubnetOutboundReject
+      MetricName: PrivateSubnetReject
       Statistic: Sum
       Period: 300
       EvaluationPeriods: 1
@@ -363,22 +397,21 @@ Resources:
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
       AlarmActions:
-        - !Sub arn:aws:sns:${AWS::Region}:${AWS::AccountId}:dpip-alerts
+        - !Ref AlertsTopicArn
 
-  # Metric filter — count REJECT log lines from the RDS subnet CIDR blocks
-  RdsOutboundRejectFilter:
+  # Metric filter — count REJECT log lines from either private subnet.
+  # CloudWatch filter patterns do exact string equality — CIDR notation is not
+  # supported. PrivateSubnet1Prefix/2Prefix parameters must stay in sync with
+  # the corresponding CIDR parameters (e.g. "10.0.10." for 10.0.10.0/24).
+  PrivateSubnetRejectFilter:
     Type: AWS::Logs::MetricFilter
     Properties:
       LogGroupName: !Ref FlowLogGroup
-      FilterName: !Sub dpip-rds-outbound-reject-${Environment}
-      # Flow log fields: version account-id interface-id srcaddr dstaddr srcport dstport protocol packets bytes start end action log-status
-      # CloudWatch filter patterns do exact string equality — CIDR notation is not
-      # supported. Match private subnet IPs via prefix wildcard (10.0.10.* / 10.0.11.*)
-      # and REJECT action. Update these prefixes if PrivateSubnet1Cidr/2Cidr change.
-      FilterPattern: '[version, account_id, interface_id, srcaddr = "10.0.10.*" || srcaddr = "10.0.11.*", dstaddr, srcport, dstport, protocol, packets, bytes, start, end, action = "REJECT", log_status]'
+      FilterName: !Sub dpip-private-subnet-reject-${Environment}
+      FilterPattern: !Sub '[version, account_id, interface_id, srcaddr = "${PrivateSubnet1Prefix}*" || srcaddr = "${PrivateSubnet2Prefix}*", dstaddr, srcport, dstport, protocol, packets, bytes, start, end, action = "REJECT", log_status]'
       MetricTransformations:
         - MetricNamespace: DPIP/VPC
-          MetricName: RdsSubnetOutboundReject
+          MetricName: PrivateSubnetReject
           MetricValue: "1"
           DefaultValue: 0
 
