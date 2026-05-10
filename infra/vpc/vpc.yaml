@@ -12,8 +12,13 @@ Description: >
 Parameters:
   Environment:
     Type: String
-    Default: production
+    Default: staging
     AllowedValues: [production, staging]
+    Description: >
+      Use "staging" for default deployments. Production deployments require
+      explicit --parameter-overrides Environment=production. Note: this stack
+      uses a single NAT Gateway (AZ-1 only). For production HA, add a second
+      EIP + NatGateway in PublicSubnet2 and a second private route table.
 
   VpcCidr:
     Type: String
@@ -254,8 +259,8 @@ Resources:
           Description: Postgres from Lambda scrapers
       SecurityGroupEgress:
         - IpProtocol: "-1"
-          CidrIp: "0.0.0.0/0"
-          Description: RDS outbound (replication, maintenance)
+          CidrIp: !Ref VpcCidr
+          Description: RDS outbound restricted to VPC CIDR (replication only; no internet path)
       Tags:
         - Key: Name
           Value: !Sub dpip-sg-rds-${Environment}
@@ -321,8 +326,6 @@ Resources:
                 Action:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
-                  - logs:DescribeLogGroups
-                  - logs:DescribeLogStreams
                 Resource: !GetAtt FlowLogGroup.Arn
 
   VpcFlowLog:
@@ -348,15 +351,11 @@ Resources:
       AlarmDescription: >
         VPC Flow Logs detected REJECT records originating from the RDS subnet.
         This may indicate a misconfigured security group or lateral movement attempt.
-      Namespace: AWS/Logs
-      MetricName: IncomingLogEvents
-      # CloudWatch metric filter (defined below) emits this metric when REJECT
-      # records are seen from the RDS subnet CIDR.
-      Dimensions:
-        - Name: LogGroupName
-          Value: !Ref FlowLogGroup
-        - Name: FilterName
-          Value: !Sub dpip-rds-outbound-reject-${Environment}
+      # Namespace + MetricName must exactly match the MetricTransformations in
+      # RdsOutboundRejectFilter below. Custom metric filters have no automatic
+      # dimensions, so the Dimensions block is intentionally omitted.
+      Namespace: DPIP/VPC
+      MetricName: RdsSubnetOutboundReject
       Statistic: Sum
       Period: 300
       EvaluationPeriods: 1
@@ -373,8 +372,10 @@ Resources:
       LogGroupName: !Ref FlowLogGroup
       FilterName: !Sub dpip-rds-outbound-reject-${Environment}
       # Flow log fields: version account-id interface-id srcaddr dstaddr srcport dstport protocol packets bytes start end action log-status
-      # Match lines where action=REJECT and srcaddr is in either RDS private subnet
-      FilterPattern: !Sub '[version, account_id, interface_id, srcaddr = "${PrivateSubnet1Cidr}" || srcaddr = "${PrivateSubnet2Cidr}", dstaddr, srcport, dstport, protocol, packets, bytes, start, end, action = "REJECT", log_status]'
+      # CloudWatch filter patterns do exact string equality — CIDR notation is not
+      # supported. Match private subnet IPs via prefix wildcard (10.0.10.* / 10.0.11.*)
+      # and REJECT action. Update these prefixes if PrivateSubnet1Cidr/2Cidr change.
+      FilterPattern: '[version, account_id, interface_id, srcaddr = "10.0.10.*" || srcaddr = "10.0.11.*", dstaddr, srcport, dstport, protocol, packets, bytes, start, end, action = "REJECT", log_status]'
       MetricTransformations:
         - MetricNamespace: DPIP/VPC
           MetricName: RdsSubnetOutboundReject
