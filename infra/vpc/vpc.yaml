@@ -210,11 +210,13 @@ Resources:
 
   # ── Security Groups ───────────────────────────────────────────────────────────
 
-  # ALB SG — internet-facing; accepts HTTPS/HTTP from anywhere
+  # ALB SG — internet-facing; accepts HTTPS/HTTP from anywhere.
+  # Egress is defined as separate SecurityGroupEgress resources below to break
+  # the circular dependency with EcsSecurityGroup (ALB egress -> ECS SG ingress).
   AlbSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: ALB — public HTTPS/HTTP ingress
+      GroupDescription: ALB - public HTTPS/HTTP ingress
       VpcId: !Ref VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
@@ -227,26 +229,16 @@ Resources:
           ToPort: 80
           CidrIp: "0.0.0.0/0"
           Description: HTTP from internet (redirect to HTTPS)
-      SecurityGroupEgress:
-        - IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-          DestinationSecurityGroupId: !Ref EcsSecurityGroup
-          Description: HTTPS to ECS tasks
-        - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-          DestinationSecurityGroupId: !Ref EcsSecurityGroup
-          Description: HTTP to ECS tasks
       Tags:
         - Key: Name
           Value: !Sub dpip-sg-alb-${Environment}
 
-  # ECS SG — private; accepts traffic only from ALB; unrestricted outbound
+  # ECS SG — private; accepts traffic only from ALB; unrestricted outbound.
+  # Ingress from ALB SG is defined here; ALB egress rules are separate resources.
   EcsSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: ECS tasks — inbound from ALB only; outbound unrestricted
+      GroupDescription: ECS tasks - inbound from ALB only; outbound unrestricted
       VpcId: !Ref VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
@@ -267,11 +259,32 @@ Resources:
         - Key: Name
           Value: !Sub dpip-sg-ecs-${Environment}
 
+  # ALB egress rules — separate resources to break the ALB <-> ECS circular dep.
+  AlbEgressHttps:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref AlbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      DestinationSecurityGroupId: !Ref EcsSecurityGroup
+      Description: HTTPS to ECS tasks
+
+  AlbEgressHttp:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref AlbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      DestinationSecurityGroupId: !Ref EcsSecurityGroup
+      Description: HTTP to ECS tasks
+
   # RDS SG — private; accepts Postgres only from ECS and Lambda scraper SGs
   RdsSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: RDS Postgres — inbound 5432 from ECS and Lambda only
+      GroupDescription: RDS Postgres - inbound 5432 from ECS and Lambda only
       VpcId: !Ref VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
@@ -287,7 +300,7 @@ Resources:
       SecurityGroupEgress:
         - IpProtocol: "-1"
           CidrIp: !Ref VpcCidr
-          Description: All protocols to VPC CIDR only — no internet path from private subnet
+          Description: All protocols to VPC CIDR only - no internet path from private subnet
       Tags:
         - Key: Name
           Value: !Sub dpip-sg-rds-${Environment}
@@ -296,7 +309,7 @@ Resources:
   OpenSearchSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: OpenSearch — inbound 443 from ECS only
+      GroupDescription: OpenSearch - inbound 443 from ECS only
       VpcId: !Ref VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
@@ -316,7 +329,7 @@ Resources:
   LambdaSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Lambda scrapers — no inbound; outbound unrestricted
+      GroupDescription: Lambda scrapers - no inbound; outbound unrestricted
       VpcId: !Ref VPC
       SecurityGroupEgress:
         - IpProtocol: "-1"
