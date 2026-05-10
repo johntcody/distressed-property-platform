@@ -118,7 +118,7 @@ These are not code tasks but must be resolved before the phases that depend on t
 | 6.2 — Secrets Manager + IAM roles per service | **Complete** — `services/config.py`; `infra/iam/`; all 11 services switched to `get_db_url()`; trufflehog CI scan added |
 | 6.3 — Least-privilege DB users | **Complete** — `db/migrations/014_least_privilege_users.sql`; verified on Neon dev DB |
 | 6.4 — WAF + rate limiting | **Complete** — `infra/waf/waf.yaml` (CloudFormation: OWASP CRS + SQLi rules, 100 req/5min IP limit, geo-block non-US); `api/middleware.py` slowapi wired into all 12 services; /opportunities 30/min, /analysis 60/min per user; 10 tests pass |
-| 6.5 — VPC + security groups | Not started |
+| 6.5 — VPC + security groups | **Complete** — `infra/vpc/vpc.yaml` (VPC, 2 AZs, public/private subnets, NAT GW, 5 SGs, Flow Logs → CloudWatch 30d, REJECT alarm on RDS subnet); network diagram in `docs/architecture.md` |
 | 6.6 — Audit logging | Not started |
 | 7.1 — CloudWatch Container Insights | Not started |
 | 7.2 — RDS Performance Insights + slow query log | Not started |
