@@ -1,0 +1,451 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  DPIP VPC — private networking for RDS, OpenSearch, ECS, and Lambda scrapers.
+  Deploys across 2 AZs with public/private subnet pairs.
+  ECS tasks and Lambda scrapers run in private subnets; outbound internet via NAT Gateway.
+  RDS and OpenSearch have no public endpoints.
+  VPC Flow Logs ship to CloudWatch with 30-day retention.
+
+  IMPORTANT: Deploy this stack BEFORE the ECS, RDS, and OpenSearch stacks.
+  All resource IDs are exported so downstream stacks can reference them via !ImportValue.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: production
+    AllowedValues: [production, staging]
+
+  VpcCidr:
+    Type: String
+    Default: "10.0.0.0/16"
+    Description: CIDR block for the VPC
+
+  PublicSubnet1Cidr:
+    Type: String
+    Default: "10.0.0.0/24"
+
+  PublicSubnet2Cidr:
+    Type: String
+    Default: "10.0.1.0/24"
+
+  PrivateSubnet1Cidr:
+    Type: String
+    Default: "10.0.10.0/24"
+
+  PrivateSubnet2Cidr:
+    Type: String
+    Default: "10.0.11.0/24"
+
+
+Resources:
+
+  # ── VPC ───────────────────────────────────────────────────────────────────────
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub dpip-vpc-${Environment}
+
+  # ── Internet Gateway ──────────────────────────────────────────────────────────
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub dpip-igw-${Environment}
+
+  IGWAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  # ── Public Subnets (ALB, NAT Gateway) ────────────────────────────────────────
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PublicSubnet1Cidr
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub dpip-public-1-${Environment}
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PublicSubnet2Cidr
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub dpip-public-2-${Environment}
+
+  # ── Private Subnets (ECS, RDS, OpenSearch, Lambda) ───────────────────────────
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateSubnet1Cidr
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub dpip-private-1-${Environment}
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateSubnet2Cidr
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub dpip-private-2-${Environment}
+
+  # ── NAT Gateway (one per VPC — single AZ is sufficient for dev/staging;
+  #    for production HA, add a second EIP + NAT in AZ2) ──────────────────────
+  NatEIP:
+    Type: AWS::EC2::EIP
+    DependsOn: IGWAttachment
+    Properties:
+      Domain: vpc
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatEIP.AllocationId
+      SubnetId: !Ref PublicSubnet1
+      Tags:
+        - Key: Name
+          Value: !Sub dpip-nat-${Environment}
+
+  # ── Route Tables ──────────────────────────────────────────────────────────────
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub dpip-public-rt-${Environment}
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: IGWAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: "0.0.0.0/0"
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1RouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnet2RouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub dpip-private-rt-${Environment}
+
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: "0.0.0.0/0"
+      NatGatewayId: !Ref NatGateway
+
+  PrivateSubnet1RouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnet2RouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable
+
+  # ── Security Groups ───────────────────────────────────────────────────────────
+
+  # ALB SG — internet-facing; accepts HTTPS/HTTP from anywhere
+  AlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ALB — public HTTPS/HTTP ingress
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: "0.0.0.0/0"
+          Description: HTTPS from internet
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: "0.0.0.0/0"
+          Description: HTTP from internet (redirect to HTTPS)
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: "0.0.0.0/0"
+          Description: ALB can reach ECS tasks in private subnets
+      Tags:
+        - Key: Name
+          Value: !Sub dpip-sg-alb-${Environment}
+
+  # ECS SG — private; accepts traffic only from ALB; unrestricted outbound
+  EcsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ECS tasks — inbound from ALB only; outbound unrestricted
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Ref AlbSecurityGroup
+          Description: HTTPS from ALB
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref AlbSecurityGroup
+          Description: HTTP from ALB
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: "0.0.0.0/0"
+          Description: Outbound unrestricted (external APIs, Secrets Manager, SQS via NAT)
+      Tags:
+        - Key: Name
+          Value: !Sub dpip-sg-ecs-${Environment}
+
+  # RDS SG — private; accepts Postgres only from ECS and Lambda scraper SGs
+  RdsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: RDS Postgres — inbound 5432 from ECS and Lambda only
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref EcsSecurityGroup
+          Description: Postgres from ECS tasks
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref LambdaSecurityGroup
+          Description: Postgres from Lambda scrapers
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: "0.0.0.0/0"
+          Description: RDS outbound (replication, maintenance)
+      Tags:
+        - Key: Name
+          Value: !Sub dpip-sg-rds-${Environment}
+
+  # OpenSearch SG — private; accepts HTTPS only from ECS
+  OpenSearchSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: OpenSearch — inbound 443 from ECS only
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Ref EcsSecurityGroup
+          Description: HTTPS from ECS tasks
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: "0.0.0.0/0"
+          Description: OpenSearch outbound
+      Tags:
+        - Key: Name
+          Value: !Sub dpip-sg-opensearch-${Environment}
+
+  # Lambda scraper SG — private; no inbound; unrestricted outbound for county sites
+  LambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Lambda scrapers — no inbound; outbound unrestricted
+      VpcId: !Ref VPC
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: "0.0.0.0/0"
+          Description: Outbound unrestricted (county clerk sites, CAD APIs, Estated)
+      Tags:
+        - Key: Name
+          Value: !Sub dpip-sg-lambda-${Environment}
+
+  # ── VPC Flow Logs ─────────────────────────────────────────────────────────────
+  FlowLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /dpip/vpc/flow-logs-${Environment}
+      RetentionInDays: 30
+
+  FlowLogRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub dpip-vpc-flow-log-role-${Environment}
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: vpc-flow-logs.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: FlowLogWrite
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogGroups
+                  - logs:DescribeLogStreams
+                Resource: !GetAtt FlowLogGroup.Arn
+
+  VpcFlowLog:
+    Type: AWS::EC2::FlowLog
+    Properties:
+      ResourceId: !Ref VPC
+      ResourceType: VPC
+      TrafficType: ALL
+      LogDestinationType: cloud-watch-logs
+      LogGroupName: !Ref FlowLogGroup
+      DeliverLogsPermissionArn: !GetAtt FlowLogRole.Arn
+      Tags:
+        - Key: Name
+          Value: !Sub dpip-flow-log-${Environment}
+
+  # ── CloudWatch Alarm — unexpected outbound from RDS private subnet ────────────
+  # Flow logs record rejected packets. An alarm on REJECT records from the RDS
+  # CIDR catches misconfigured rules or lateral movement attempts.
+  RdsOutboundRejectAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub dpip-vpc-rds-outbound-reject-${Environment}
+      AlarmDescription: >
+        VPC Flow Logs detected REJECT records originating from the RDS subnet.
+        This may indicate a misconfigured security group or lateral movement attempt.
+      Namespace: AWS/Logs
+      MetricName: IncomingLogEvents
+      # CloudWatch metric filter (defined below) emits this metric when REJECT
+      # records are seen from the RDS subnet CIDR.
+      Dimensions:
+        - Name: LogGroupName
+          Value: !Ref FlowLogGroup
+        - Name: FilterName
+          Value: !Sub dpip-rds-outbound-reject-${Environment}
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Sub arn:aws:sns:${AWS::Region}:${AWS::AccountId}:dpip-alerts
+
+  # Metric filter — count REJECT log lines from the RDS subnet CIDR blocks
+  RdsOutboundRejectFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref FlowLogGroup
+      FilterName: !Sub dpip-rds-outbound-reject-${Environment}
+      # Flow log fields: version account-id interface-id srcaddr dstaddr srcport dstport protocol packets bytes start end action log-status
+      # Match lines where action=REJECT and srcaddr is in either RDS private subnet
+      FilterPattern: !Sub '[version, account_id, interface_id, srcaddr = "${PrivateSubnet1Cidr}" || srcaddr = "${PrivateSubnet2Cidr}", dstaddr, srcport, dstport, protocol, packets, bytes, start, end, action = "REJECT", log_status]'
+      MetricTransformations:
+        - MetricNamespace: DPIP/VPC
+          MetricName: RdsSubnetOutboundReject
+          MetricValue: "1"
+          DefaultValue: 0
+
+
+Outputs:
+
+  VpcId:
+    Description: VPC ID
+    Value: !Ref VPC
+    Export:
+      Name: !Sub dpip-vpc-id-${Environment}
+
+  PublicSubnet1Id:
+    Description: Public subnet AZ1
+    Value: !Ref PublicSubnet1
+    Export:
+      Name: !Sub dpip-public-subnet-1-${Environment}
+
+  PublicSubnet2Id:
+    Description: Public subnet AZ2
+    Value: !Ref PublicSubnet2
+    Export:
+      Name: !Sub dpip-public-subnet-2-${Environment}
+
+  PrivateSubnet1Id:
+    Description: Private subnet AZ1 (ECS, RDS, OpenSearch, Lambda)
+    Value: !Ref PrivateSubnet1
+    Export:
+      Name: !Sub dpip-private-subnet-1-${Environment}
+
+  PrivateSubnet2Id:
+    Description: Private subnet AZ2 (ECS, RDS, OpenSearch, Lambda)
+    Value: !Ref PrivateSubnet2
+    Export:
+      Name: !Sub dpip-private-subnet-2-${Environment}
+
+  AlbSecurityGroupId:
+    Description: Security group for the Application Load Balancer
+    Value: !Ref AlbSecurityGroup
+    Export:
+      Name: !Sub dpip-sg-alb-${Environment}
+
+  EcsSecurityGroupId:
+    Description: Security group for ECS tasks
+    Value: !Ref EcsSecurityGroup
+    Export:
+      Name: !Sub dpip-sg-ecs-${Environment}
+
+  RdsSecurityGroupId:
+    Description: Security group for RDS Postgres
+    Value: !Ref RdsSecurityGroup
+    Export:
+      Name: !Sub dpip-sg-rds-${Environment}
+
+  OpenSearchSecurityGroupId:
+    Description: Security group for OpenSearch domain
+    Value: !Ref OpenSearchSecurityGroup
+    Export:
+      Name: !Sub dpip-sg-opensearch-${Environment}
+
+  LambdaSecurityGroupId:
+    Description: Security group for Lambda scrapers
+    Value: !Ref LambdaSecurityGroup
+    Export:
+      Name: !Sub dpip-sg-lambda-${Environment}
+
+  FlowLogGroupName:
+    Description: CloudWatch Log Group receiving VPC Flow Logs
+    Value: !Ref FlowLogGroup
+    Export:
+      Name: !Sub dpip-flow-log-group-${Environment}
