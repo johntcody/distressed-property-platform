@@ -102,7 +102,7 @@ These are not code tasks but must be resolved before the phases that depend on t
 | 1.3 — Tax delinquency scraper | **Complete** — `ingestion/tax_delinquency/` |
 | 1.4 — Pre-foreclosure scraper | **Complete** — `ingestion/preforeclosure/` |
 | 1.5 — Probate scraper | **Complete** — `ingestion/probate/` (Burnet + Lee = manual fallback) |
-| 2.1 — Distress score engine | **Complete** — `services/distress-score/` |
+| 2.1 — Distress score engine | **Complete** — `services/distress_score/` |
 | 2.2 — Equity estimation engine | **Complete** — `services/equity_engine/` |
 | 2.2.1 — AVM service (Estated) | **Complete** — `services/avm_service/`; equity engine reads `valuations` with CAD fallback |
 | 2.3 — Market score engine | **Complete** — `services/market_score/` |
